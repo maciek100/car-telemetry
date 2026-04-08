@@ -37,7 +37,7 @@ public class AnalyticsService {
         }
     }
 
-    private void processVin(String vin) {
+     void processVin(String vin) {
         List<CarPositionDocument> unprocessed = carPositionRepository
                 .findByVinAndProcessedFalseOrderByTimestampAsc(vin);
 
@@ -63,10 +63,11 @@ public class AnalyticsService {
                     to.getLatitude(), to.getLongitude()
             );
 
+            double computedSpeedKph = computeSpeedKph(distanceMeters, to.getTimestamp(), from.getTimestamp());
             double timeDeltaSeconds = (to.getTimestamp() - from.getTimestamp()) / 1000.0;
-            double computedSpeedKph = timeDeltaSeconds > 0
-                    ? (distanceMeters / timeDeltaSeconds) * 3.6
-                    : 0;
+            //double computedSpeedKph = timeDeltaSeconds > 0
+              //      ? (distanceMeters / timeDeltaSeconds) * 3.6
+                //    : 0;
 
             // update trip
             currentTrip.setTotalDistanceMeters(
@@ -76,12 +77,6 @@ public class AnalyticsService {
             currentTrip.setLastLat(to.getLatitude());
             currentTrip.setLastLon(to.getLongitude());
 
-
-            /*
-            double value = 27.987654321;
-
-        double rounded = Math.round(value * 100.0) / 100.0;
-             */
             // update max speed
             if (computedSpeedKph > currentTrip.getMaxSpeedKph())
                 currentTrip.setMaxSpeedKph(Math.round(computedSpeedKph * 100.0)/ 100.0);
@@ -178,7 +173,7 @@ public class AnalyticsService {
         speedAlertRepository.save(alert);
     }
 
-    private double haversine(double lat1, double lon1, double lat2, double lon2) {
+    double haversine(double lat1, double lon1, double lat2, double lon2) {
         double R = 6371000; // Earth radius in meters
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);
@@ -187,4 +182,11 @@ public class AnalyticsService {
                         Math.sin(dLon/2) * Math.sin(dLon/2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
+
+    double computeSpeedKph(double distanceMeters, long fromTimestamp, long toTimestamp) {
+        double timeDeltaSeconds = (toTimestamp - fromTimestamp) / 1000.0;
+        if (timeDeltaSeconds <= 0) return 0;
+        return (distanceMeters / timeDeltaSeconds) * 3.6;
+    }
+
 }
