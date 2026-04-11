@@ -8,7 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -38,20 +40,30 @@ public class AnalyticsService {
     }
 
      void processVin(String vin) {
-        List<CarPositionDocument> unprocessed = carPositionRepository
-                .findByVinAndProcessedFalseOrderByTimestampAsc(vin);
+        List<CarPositionDocument> unprocessed = new ArrayList<>(carPositionRepository
+                .findByVinAndProcessedFalseOrderByTimestampAsc(vin));
 
         if (unprocessed.isEmpty()) {
             checkTripTimeout(vin);
+            log.info("No data points for {} ", vin);
             return;
         }
 
         log.info("Processing {} unprocessed records for VIN: {}", unprocessed.size(), vin);
 
         // get or create current trip
-        CurrentTripDocument currentTrip = currentTripRepository
-                .findByVin(vin)
-                .orElseGet(() -> createNewTrip(vin, unprocessed.get(0)));
+        Optional<CurrentTripDocument> existingTrip = currentTripRepository.findByVin(vin);
+        existingTrip.ifPresent(trip -> {
+            CarPositionDocument bridge = new CarPositionDocument();
+            bridge.setVin(vin);
+            bridge.setLatitude(trip.getLastLat());
+            bridge.setLongitude(trip.getLastLon());
+            bridge.setTimestamp(trip.getLastUpdateTimestamp());
+            bridge.setProcessed(true);
+            unprocessed.add(0,bridge);
+        });
+        CurrentTripDocument currentTrip = existingTrip
+                .orElseGet(() -> createNewTrip(vin, unprocessed.getFirst()));
 
         // process each consecutive pair
         for (int i = 0; i < unprocessed.size() - 1; i++) {
@@ -63,45 +75,22 @@ public class AnalyticsService {
                     to.getLatitude(), to.getLongitude()
             );
 
-            double computedSpeedKph = computeSpeedKph(distanceMeters, to.getTimestamp(), from.getTimestamp());
-            double timeDeltaSeconds = (to.getTimestamp() - from.getTimestamp()) / 1000.0;
-            //double computedSpeedKph = timeDeltaSeconds > 0
-              //      ? (distanceMeters / timeDeltaSeconds) * 3.6
-                //    : 0;
+            double computedSpeedKph = computeSpeedKph(distanceMeters, from.getTimestamp(), to.getTimestamp());
 
-            // update trip
-            currentTrip.setTotalDistanceMeters(
-                    currentTrip.getTotalDistanceMeters() + distanceMeters);
-            currentTrip.setTotalReadings(currentTrip.getTotalReadings() + 1);
-            currentTrip.setLastUpdateTimestamp(to.getTimestamp());
-            currentTrip.setLastLat(to.getLatitude());
-            currentTrip.setLastLon(to.getLongitude());
+            updateTrip(currentTrip, to, distanceMeters, computedSpeedKph);
 
-            // update max speed
-            if (computedSpeedKph > currentTrip.getMaxSpeedKph())
-                currentTrip.setMaxSpeedKph(Math.round(computedSpeedKph * 100.0)/ 100.0);
-
-            // update average speed
-            currentTrip.setAverageSpeedKph(Math.round(
-                    (currentTrip.getAverageSpeedKph() * (currentTrip.getTotalReadings() - 1)
-                            + computedSpeedKph) / currentTrip.getTotalReadings()
-            * 100.0)/ 100.0);
-
-            // check speed alert
-            if (computedSpeedKph > SPEED_LIMIT_KPH) {
-                createSpeedAlert(vin, to, Math.round(computedSpeedKph * 100.0)/ 100.0);
+            if (!from.isProcessed()) {
+                from.setProcessed(true);
+                carPositionRepository.save(from);
             }
-
-            // mark as processed
-            from.setProcessed(true);
-            carPositionRepository.save(from);
         }
 
         // mark last document as processed
         CarPositionDocument last = unprocessed.get(unprocessed.size() - 1);
-        last.setProcessed(true);
-        carPositionRepository.save(last);
-
+        if(!last.isProcessed()) {
+            last.setProcessed(true);
+            carPositionRepository.save(last);
+        }
         // save updated trip
         currentTripRepository.save(currentTrip);
 
@@ -110,6 +99,30 @@ public class AnalyticsService {
                 String.format("%.2f", currentTrip.getTotalDistanceMeters()),
                 String.format("%.2f", currentTrip.getAverageSpeedKph()),
                 String.format("%.2f", currentTrip.getMaxSpeedKph()));
+    }
+
+    private void updateTrip (CurrentTripDocument currentTrip, CarPositionDocument to, double distanceMeters, double computedSpeedKph) {
+        currentTrip.setTotalDistanceMeters(
+                currentTrip.getTotalDistanceMeters() + distanceMeters);
+        currentTrip.setTotalReadings(currentTrip.getTotalReadings() + 1);
+        currentTrip.setLastUpdateTimestamp(to.getTimestamp());
+        currentTrip.setLastLat(to.getLatitude());
+        currentTrip.setLastLon(to.getLongitude());
+
+        // update max speed
+        if (computedSpeedKph > currentTrip.getMaxSpeedKph())
+            currentTrip.setMaxSpeedKph(Math.round(computedSpeedKph * 100.0)/ 100.0);
+
+        // update average speed
+        currentTrip.setAverageSpeedKph(Math.round(
+                (currentTrip.getAverageSpeedKph() * (currentTrip.getTotalReadings() - 1)
+                        + computedSpeedKph) / currentTrip.getTotalReadings()
+                        * 100.0)/ 100.0);
+
+        // check speed alert
+        if (computedSpeedKph > SPEED_LIMIT_KPH) {
+            createSpeedAlert(currentTrip.getVin(), to, Math.round(computedSpeedKph * 100.0)/ 100.0);
+        }
     }
 
     private void checkTripTimeout(String vin) {

@@ -120,13 +120,13 @@ public class AnalyticsServiceTest {
         doc1.setLongitude(-97.730);
         CarPositionDocument doc2 = new CarPositionDocument();
         doc2.setVin(vin);
-        doc2.setTimestamp(1001L);
+        doc2.setTimestamp(11000L);
         doc2.setLatitude(30.265);
-        doc2.setLongitude(-97.731);
-        // - no existing current trip for that VIN
+        doc2.setLongitude(-97.7285);
+
         List<CarPositionDocument> documents = List.of(doc1, doc2);
         when(carPositionRepository.findByVinAndProcessedFalseOrderByTimestampAsc(vin)).thenReturn(documents);
-        //CurrentTripDocument currentStart = createNewTrip(vin, documents.getFirst());
+        // - no existing current trip for that VIN
         when(currentTripRepository.findByVin(vin)).thenReturn(Optional.empty());
 
 
@@ -146,19 +146,66 @@ public class AnalyticsServiceTest {
         assertEquals(1000L, savedTrip.getTripStartTimestamp());
     }
 
-    private CurrentTripDocument createNewTrip(String vin, CarPositionDocument first) {
+    @Test
+    void tripUpdatesCorrectlyWithNewPosition () {
+        String vin = "1HGBH41JXMN109186";
+        // GIVEN
+        // - two unprocessed CarPositionDocuments for a VIN
+        CarPositionDocument doc1 = new CarPositionDocument();
+        doc1.setVin(vin);
+        doc1.setTimestamp(11000L);
+        doc1.setLatitude(30.266);
+        doc1.setLongitude(-97.730);
+        CarPositionDocument doc2 = new CarPositionDocument();
+        doc2.setVin(vin);
+        doc2.setTimestamp(21000L);
+        doc2.setLatitude(30.265);
+        doc2.setLongitude(-97.731);
+        //CarPositionDocument doc00 = new CarPositionDocument();
+        //doc0.setVin(vin);
+        //doc0.setTimestamp(1000L);
+        //doc0.setLatitude(30.268);
+        //doc0.setLongitude(-97.728);
+
+        List<CarPositionDocument> carPositionDocs = List.of(doc1, doc2);
+        when(carPositionRepository.findByVinAndProcessedFalseOrderByTimestampAsc(vin)).thenReturn(carPositionDocs);
+        when(currentTripRepository.findByVin(vin)).thenReturn(Optional.of(returnExistingTrip(vin)));
+
+
+        // WHEN
+        // - processVin() is called
+        analyticsService.processVin(vin);
+
+        // THEN
+        // - currentTripRepository.save() was called with a new trip
+        ArgumentCaptor<CurrentTripDocument> captor = ArgumentCaptor.forClass(CurrentTripDocument.class);
+        verify(currentTripRepository).save(captor.capture());
+
+        CurrentTripDocument savedTrip = captor.getValue();
+        assertEquals(vin, savedTrip.getVin());
+        assertEquals(30.267, savedTrip.getStartLat());
+        assertEquals(-97.729, savedTrip.getStartLon());
+        assertEquals( 5, savedTrip.getTotalReadings());
+        assertEquals( 21000L, savedTrip.getLastUpdateTimestamp());
+        assertEquals( 30.265, savedTrip.getLastLat());
+        assertEquals( -97.731, savedTrip.getLastLon());
+        assertEquals(703.35, savedTrip.getTotalDistanceMeters(), 1.0);
+        assertEquals(44.64, savedTrip.getAverageSpeedKph());
+    }
+
+    private CurrentTripDocument returnExistingTrip(String vin) {
         CurrentTripDocument trip = new CurrentTripDocument();
         trip.setVin(vin);
-        trip.setTripStartTimestamp(first.getTimestamp());
-        trip.setLastUpdateTimestamp(first.getTimestamp());
-        trip.setStartLat(first.getLatitude());
-        trip.setStartLon(first.getLongitude());
-        trip.setLastLat(first.getLatitude());
-        trip.setLastLon(first.getLongitude());
-        trip.setTotalDistanceMeters(0);
-        trip.setAverageSpeedKph(0);
-        trip.setMaxSpeedKph(0);
-        trip.setTotalReadings(0);
+        trip.setTripStartTimestamp(10);
+        trip.setLastUpdateTimestamp(1000);
+        trip.setStartLat(30.267);
+        trip.setStartLon(-97.729);
+        trip.setLastLat(30.2665);
+        trip.setLastLon(-97.7299);
+        trip.setTotalDistanceMeters(500);
+        trip.setAverageSpeedKph(50.0);
+        trip.setMaxSpeedKph(80.0);
+        trip.setTotalReadings(3);
         return trip;
     }
 }
