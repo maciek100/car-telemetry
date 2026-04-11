@@ -20,11 +20,11 @@ public class AnalyticsService {
 
     private static final double SPEED_LIMIT_KPH = 120.0;
     private static final long TRIP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-    private static final String[] VINS = {
-            "1HGBH41JXMN109186",
-            "2T1BURHE0JC043821",
-            "3VWFE21C04M000001"
-    };
+    //private static final String[] VINS = {
+    //        "1HGBH41JXMN109186",
+    //        "2T1BURHE0JC043821",
+    //        "3VWFE21C04M000001"
+    //};
 
     private final CarPositionRepository carPositionRepository;
     private final CurrentTripRepository currentTripRepository;
@@ -34,9 +34,11 @@ public class AnalyticsService {
     @Scheduled(fixedRate = 300000) // every 5 minutes
     public void processAnalytics() {
         log.info("Running analytics...");
-        for (String vin : VINS) {
-            processVin(vin);
-        }
+        //for (String vin : VINS) {
+        //    processVin(vin);
+        //}
+        carPositionRepository.findDistinctVinBy()
+                .forEach(this::processVin);
     }
 
      void processVin(String vin) {
