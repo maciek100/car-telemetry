@@ -5,6 +5,7 @@ import com.cartelemetry.car_consumer.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -17,7 +18,7 @@ import java.util.Optional;
 public class AnalyticsService {
 
     private static final Logger log = LoggerFactory.getLogger(AnalyticsService.class);
-
+    private final MongoTemplate mongoTemplate;
     private static final double SPEED_LIMIT_KPH = 120.0;
     private static final long TRIP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
     //private static final String[] VINS = {
@@ -37,8 +38,13 @@ public class AnalyticsService {
         //for (String vin : VINS) {
         //    processVin(vin);
         //}
-        carPositionRepository.findDistinctVinBy()
-                .forEach(this::processVin);
+        List<String> vins = mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class);
+        //carPositionRepository.findDistinctVinBy()
+         //       .stream()
+          //      .forEach(this::processVin);
+        for (String vin : vins) {
+            processVin(vin);
+        }
     }
 
      void processVin(String vin) {
