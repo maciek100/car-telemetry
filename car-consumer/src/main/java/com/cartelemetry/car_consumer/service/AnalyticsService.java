@@ -75,7 +75,7 @@ public class AnalyticsService {
             double computedSpeedKph = computeSpeedKph(distanceMeters, from.getTimestamp(), to.getTimestamp());
             double timeDeltaSeconds = (to.getTimestamp() - from.getTimestamp()) / 1000.0;
             if (computedSpeedKph > 300) {  // suspicious threshold
-                log.warn("SUSPICIOUS SPEED for VIN: {} speed: {}kph distance: {}m timeDelta: {}s from: ({},{}) to: ({},{})",
+                log.warn("SUSPICIOUS SPEED [GPS anomaly] for VIN: {} speed: {}kph distance: {}m timeDelta: {}s from: ({},{}) to: ({},{})",
                         vin,
                         String.format("%.2f", computedSpeedKph),
                         String.format("%.2f", distanceMeters),
