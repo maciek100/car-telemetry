@@ -1,6 +1,7 @@
 package com.cartelemetry.car_consumer.service;
 
 import com.cartelemetry.car_consumer.model.CarPositionDocument;
+import com.cartelemetry.car_consumer.model.CompletedTripDocument;
 import com.cartelemetry.car_consumer.model.CurrentTripDocument;
 import com.cartelemetry.car_consumer.model.SpeedAlertDocument;
 import com.cartelemetry.car_consumer.repository.CarPositionRepository;
@@ -330,14 +331,15 @@ public class AnalyticsServiceTest {
     @Test
     public void haversineSpeed2Test () {
         double startLon = -97.728;
-        double endLon =   -97.72834;
+        double endLon =   -97.7281;
         double startLat = 30.264D;
-        double endLat = 30.2645D;
+        double endLat = 30.2642D;
         double distance = analyticsService.haversine(startLat, startLon, endLat, endLon);
         double speed = analyticsService.computeSpeedKph(distance, 1000, 2000);
-        //assertEquals(12.45D, distance, 1.0D);
-        //assertEquals(48.40D, speed, 1.0D);
         System.out.println(distance + "   " + speed);
+        assertEquals(24.0D, distance, 1.0D);
+        assertEquals(87.0D, speed, 1.0D);
+
     }
 
     @Test
@@ -345,12 +347,33 @@ public class AnalyticsServiceTest {
         //less than 300kph (GPS anomaly)
         //more than SPEED_LIMIT_KPH ... currently 120.
         double startLon = -97.7280;
-        double endLon   = -97.7284;
+        double endLon   = -97.7285;
         double startLat = 30.264D;
         double endLat   = 30.2642D;
         double distance = analyticsService.haversine(startLat, startLon, endLat, endLon);
         double speed = analyticsService.computeSpeedKph(distance, 1000, 2000);
-        //assertEquals(242.40D, speed, 1.0D);
-        System.out.println(distance + "    " + speed);
+        assertEquals(53.0D, distance, 1.0D);
+        assertEquals(190.0D, speed, 1.0D);
     }
+
+    @Test
+    public void tripCompletesAfterTimeout () {
+        //GIVEN
+        long timeNow = System.currentTimeMillis();
+        String vin = "VIN0011";
+        CurrentTripDocument currentTrip = buildExistingTrip(vin, timeNow - 700_000);
+        when(currentTripRepository.findByVin(vin)).thenReturn(Optional.of(currentTrip));
+        //when(carPositionRepository.findByVin(vin)).thenReturn(List.of());
+
+        //WHEN
+        analyticsService.processVin(vin);
+
+        //THEN
+        ArgumentCaptor<CompletedTripDocument> captor = ArgumentCaptor.forClass(CompletedTripDocument.class);
+        verify(completedTripRepository).save(captor.capture());
+        assertEquals(vin, captor.getValue().getVin());
+        ArgumentCaptor<CurrentTripDocument> captor2 = ArgumentCaptor.forClass(CurrentTripDocument.class);
+        verify(currentTripRepository).delete(captor2.capture());
+    }
+
 }
