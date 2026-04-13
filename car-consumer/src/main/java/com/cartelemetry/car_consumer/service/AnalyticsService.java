@@ -62,7 +62,16 @@ public class AnalyticsService {
         CurrentTripDocument currentTrip = existingTrip
                 .orElseGet(() -> createNewTrip(vin, unprocessed.getFirst()));
 
-        // process each consecutive pair
+        //discard any LATE arriving document ...
+         // these are the docs which were recorded BEFORE the currentExistingTrip concluded
+         unprocessed.removeIf(doc ->
+                 doc.getTimestamp() <= existingTrip.get().getLastUpdateTimestamp());
+         if (unprocessed.isEmpty()) {
+             checkTripTimeout(vin);
+             return;
+         }
+
+         // process each consecutive pair
         for (int i = 0; i < unprocessed.size() - 1; i++) {
             CarPositionDocument from = unprocessed.get(i);
             CarPositionDocument to = unprocessed.get(i + 1);

@@ -376,4 +376,32 @@ public class AnalyticsServiceTest {
         verify(currentTripRepository).delete(captor2.capture());
     }
 
+    @Test
+    public void outOfOrderDocumentsAreDiscardedTest () {
+        //GIVEN
+        long timeNow = System.currentTimeMillis();
+        String vin = "VIN0012";
+        CurrentTripDocument existingTrip = buildExistingTrip(vin, timeNow + 5_000);
+        when(currentTripRepository.findByVin(vin)).thenReturn(Optional.of(existingTrip));
+
+        CarPositionDocument doc1 = new CarPositionDocument();
+        doc1.setVin(vin);
+        doc1.setTimestamp(timeNow + 1000L);
+        doc1.setLatitude(30.264D);
+        doc1.setLongitude(-97.728D);
+
+        CarPositionDocument doc2 = new CarPositionDocument();
+        doc2.setVin(vin);
+        doc2.setTimestamp(timeNow + 2000L);
+        doc2.setLatitude(30.2639D);
+        doc2.setLongitude(-97.7282);
+        List<CarPositionDocument> positions = List.of(doc1, doc2);
+        when(carPositionRepository.findByVinAndProcessedFalseOrderByTimestampAsc(vin)).thenReturn(positions);
+
+        //WHEN
+        analyticsService.processVin(vin);
+
+        //THEN
+        verify(currentTripRepository, never()).save(any());
+    }
 }
