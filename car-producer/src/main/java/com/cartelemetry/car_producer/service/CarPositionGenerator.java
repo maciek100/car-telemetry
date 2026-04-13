@@ -3,14 +3,9 @@ package com.cartelemetry.car_producer.service;
 import com.cartelemetry.proto.CarPosition;
 import com.cartelemetry.proto.GpsLocation;
 
-import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.temporal.TemporalAmount;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -40,33 +35,17 @@ public class CarPositionGenerator {
         VehicleLocation withMoving() {
             return new VehicleLocation(this.latitude, this.longitude, this.heading, false, null);
         }
-
-
     }
 
-//    private static final String[] VINS = {
-//            "1HGBH41JXMN109186",
-//            "2T1BURHE0JC043821",
-//            "3VWFE21C04M000001"
-//    };
-
-    private static Map<String, VehicleLocation> vehicleStates = new HashMap<>();
+    private static final Map<String, VehicleLocation> vehicleStates = new HashMap<>();
     private static List<String> vinList;
 
-    public CarPositionGenerator() {
-
-            ///vehicleStates.put("1HGBH41JXMN109186",
-            ///        new VehicleLocation(30.266, -97.730, random.nextDouble() * 360, false, null));
-        ///vehicleStates.put("2T1BURHE0JC043821",
-           ///     new VehicleLocation(30.280, -97.750, random.nextDouble() * 360, false, null));
-        ///vehicleStates.put("3VWFE21C04M000001",
-           ///     new VehicleLocation(30.250, -97.710, random.nextDouble() * 360, true, Instant.now()));
-    }
+    public CarPositionGenerator() {}
 
     @PostConstruct
     public void init () {
         for (int i = 0; i < vehicleCount; i++) {
-            String vin = generateVin(i);
+            String vin = makeVin(i);
             vehicleStates.put(vin, new VehicleLocation(
                     30.266 + random.nextDouble() * 0.1,
                     -97.730 + random.nextDouble() * 0.1,
@@ -77,13 +56,11 @@ public class CarPositionGenerator {
         vinList = vehicleStates.keySet().stream().toList();
     }
 
-    private static String generateVin (int index) {
+    private static String makeVin(int index) {
         return String.format("VIN%06d", index);
     }
 
-
-    public CarPosition generate() {
-        String vin = vinList.get(random.nextInt(vinList.size()));
+    private CarPosition generate(String vin) {
         VehicleLocation vehicleLocation = vehicleStates.get(vin);
         if (vehicleLocation.stopped()) {
             log.info("Vehicle {} is stopped until {}", vin, vehicleLocation.stopUntil);
@@ -98,8 +75,8 @@ public class CarPositionGenerator {
         if (vehicleLocation.stopped)
             log.info("Vehicle {} STOPPED until {}", vin, vehicleLocation.stopUntil);
         double newHeading = vehicleLocation.heading() + (random.nextDouble() - 0.5) * 20;
-        double newLat = vehicleLocation.latitude() + Math.cos(Math.toRadians(newHeading)) * 0.001;
-        double newLog = vehicleLocation.longitude() + Math.cos(Math.toRadians(newHeading)) * 0.001;
+        double newLat = vehicleLocation.latitude() + Math.cos(Math.toRadians(newHeading)) * 0.00015;
+        double newLog = vehicleLocation.longitude() + Math.sin(Math.toRadians(newHeading)) * 0.00015;
         vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading));
         return CarPosition.newBuilder()
                 .setVin(vin)
@@ -113,5 +90,12 @@ public class CarPositionGenerator {
                         .setLongitude(newLog)
                         .build())
                 .build();
+    }
+
+    public List<CarPosition> generateAll () {
+        return vinList.stream()
+                .map(this::generate)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 }

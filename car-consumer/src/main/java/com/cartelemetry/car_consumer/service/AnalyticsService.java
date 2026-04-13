@@ -21,11 +21,6 @@ public class AnalyticsService {
     private final MongoTemplate mongoTemplate;
     private static final double SPEED_LIMIT_KPH = 120.0;
     private static final long TRIP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-    //private static final String[] VINS = {
-    //        "1HGBH41JXMN109186",
-    //        "2T1BURHE0JC043821",
-    //        "3VWFE21C04M000001"
-    //};
 
     private final CarPositionRepository carPositionRepository;
     private final CurrentTripRepository currentTripRepository;
@@ -35,13 +30,7 @@ public class AnalyticsService {
     @Scheduled(fixedRate = 300000) // every 5 minutes
     public void processAnalytics() {
         log.info("Running analytics...");
-        //for (String vin : VINS) {
-        //    processVin(vin);
-        //}
         List<String> vins = mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class);
-        //carPositionRepository.findDistinctVinBy()
-         //       .stream()
-          //      .forEach(this::processVin);
         for (String vin : vins) {
             processVin(vin);
         }
@@ -84,7 +73,23 @@ public class AnalyticsService {
             );
 
             double computedSpeedKph = computeSpeedKph(distanceMeters, from.getTimestamp(), to.getTimestamp());
-
+            double timeDeltaSeconds = (to.getTimestamp() - from.getTimestamp()) / 1000.0;
+            if (computedSpeedKph > 300) {  // suspicious threshold
+                log.warn("SUSPICIOUS SPEED for VIN: {} speed: {}kph distance: {}m timeDelta: {}s from: ({},{}) to: ({},{})",
+                        vin,
+                        String.format("%.2f", computedSpeedKph),
+                        String.format("%.2f", distanceMeters),
+                        timeDeltaSeconds,
+                        from.getLatitude(), from.getLongitude(),
+                        to.getLatitude(), to.getLongitude()
+                );
+                continue;
+            }
+            if (distanceMeters > 1000 && timeDeltaSeconds < 10) {
+                log.warn("Suspicious position jump for VIN: {} distance: {}m in {}s",
+                        vin, String.format("%.2f", distanceMeters), timeDeltaSeconds);
+                continue;
+            }
             updateTrip(currentTrip, to, distanceMeters, computedSpeedKph);
 
             if (!from.isProcessed()) {
@@ -209,5 +214,4 @@ public class AnalyticsService {
         if (timeDeltaSeconds <= 0) return 0;
         return (distanceMeters / timeDeltaSeconds) * 3.6;
     }
-
 }
