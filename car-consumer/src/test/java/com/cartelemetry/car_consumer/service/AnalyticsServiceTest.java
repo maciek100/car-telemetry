@@ -8,6 +8,7 @@ import com.cartelemetry.car_consumer.repository.CurrentTripRepository;
 import com.cartelemetry.car_consumer.repository.SpeedAlertRepository;
 import com.cartelemetry.proto.CarPosition;
 import com.cartelemetry.proto.CarPositionResponse;
+import io.grpc.stub.StreamObserver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,8 +22,8 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class AnalyticsServiceTest {
@@ -161,11 +162,6 @@ public class AnalyticsServiceTest {
         doc2.setTimestamp(21000L);
         doc2.setLatitude(30.265);
         doc2.setLongitude(-97.731);
-        //CarPositionDocument doc00 = new CarPositionDocument();
-        //doc0.setVin(vin);
-        //doc0.setTimestamp(1000L);
-        //doc0.setLatitude(30.268);
-        //doc0.setLongitude(-97.728);
 
         List<CarPositionDocument> carPositionDocs = List.of(doc1, doc2);
         when(carPositionRepository.findByVinAndProcessedFalseOrderByTimestampAsc(vin)).thenReturn(carPositionDocs);
@@ -207,5 +203,94 @@ public class AnalyticsServiceTest {
         trip.setMaxSpeedKph(80.0);
         trip.setTotalReadings(3);
         return trip;
+    }
+
+    private CurrentTripDocument buildExistingTrip (String vin, long timeNow) {
+        CurrentTripDocument existingTrip = new CurrentTripDocument();
+        existingTrip.setVin(vin);
+        existingTrip.setId("Fluffy");
+        existingTrip.setLastLon(-97.7283D);
+        existingTrip.setLastLat(30.2641D);
+        existingTrip.setLastUpdateTimestamp(timeNow);
+        existingTrip.setStartLat(30.266); //does not matter for this test
+        existingTrip.setStartLon(-97.730); //does not matter for this test
+        existingTrip.setMaxSpeedKph(50.5); //does not matter for this test
+        existingTrip.setAverageSpeedKph(50.5);
+        existingTrip.setTotalDistanceMeters(10000);
+        existingTrip.setTotalReadings(3);
+        return existingTrip;
+    }
+
+    @Test
+    public void tripUpdatesWithNewPositionTest () {
+        //GIVEN
+        String vin = "VIN00001";
+        long timeNow = System.currentTimeMillis();
+        CurrentTripDocument existingTrip = buildExistingTrip(vin, timeNow);
+        when(currentTripRepository.findByVin(vin)).thenReturn(Optional.of(existingTrip));
+
+        CarPositionDocument doc1 = new CarPositionDocument();
+        doc1.setVin(vin);
+        doc1.setTimestamp(timeNow + 1000L);
+        doc1.setLatitude(30.264D);
+        doc1.setLongitude(-97.728D);
+
+        CarPositionDocument doc2 = new CarPositionDocument();
+        doc2.setVin(vin);
+        doc2.setTimestamp(timeNow + 2000L);
+        doc2.setLatitude(30.2639D);
+        doc2.setLongitude(-97.7282);
+        List<CarPositionDocument> positions = List.of(doc1, doc2);
+        when(carPositionRepository.findByVinAndProcessedFalseOrderByTimestampAsc(vin)).thenReturn(positions);
+
+        //WHEN
+        analyticsService.processVin(vin);
+
+        //THEN
+        ArgumentCaptor<CurrentTripDocument> captor = ArgumentCaptor.forClass(CurrentTripDocument.class);
+       verify(currentTripRepository).save(captor.capture());
+
+        CurrentTripDocument savedTrip = captor.getValue();
+        assertEquals(vin, savedTrip.getVin());
+        assertEquals(5, savedTrip.getTotalReadings());
+        assertEquals(doc2.getLatitude(), savedTrip.getLastLat());
+        assertEquals(doc2.getLongitude(), savedTrip.getLastLon());
+        assertEquals(doc2.getTimestamp(), savedTrip.getLastUpdateTimestamp());
+        assertEquals(10054D, savedTrip.getTotalDistanceMeters(), 1.0);
+    }
+
+    @Test
+    public void testHaversine () {
+        double startLon = -97.799D;
+        double startLat = 30.267D;
+        double endLon = -97.728;
+        double endLat = 30.264D;
+        double distance = analyticsService.haversine(startLat, startLon, endLat, endLon);
+        double speed = analyticsService.computeSpeedKph(distance, 1000, 2000);
+        System.out.println(distance + " , " + speed);
+
+    }
+    @Test
+    public void haversineSpeed1Test () {
+        double startLon = -97.7284D;
+        double endLon = -97.7286;
+        double startLat = 30.26455D;
+        double endLat = 30.2645D;
+        double distance = analyticsService.haversine(startLat, startLon, endLat, endLon);
+        double speed = analyticsService.computeSpeedKph(distance, 1000, 2000);
+        assertEquals(19.99D, distance, 1.0D);
+        assertEquals(71.99D, speed, 1.0D);
+    }
+
+    @Test
+    public void haversineSpeed2Test () {
+        double startLon = -97.7286;
+        double endLon = -97.72874;
+        double startLat = 30.2645D;
+        double endLat = 30.2645D;
+        double distance = analyticsService.haversine(startLat, startLon, endLat, endLon);
+        double speed = analyticsService.computeSpeedKph(distance, 1000, 2000);
+        assertEquals(12.45D, distance, 1.0D);
+        assertEquals(48.40D, speed, 1.0D);
     }
 }
