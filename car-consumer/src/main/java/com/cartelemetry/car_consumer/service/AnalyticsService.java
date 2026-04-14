@@ -36,13 +36,12 @@ public class AnalyticsService {
         }
     }
 
-     void processVin(String vin) {
+     void processVinBefore(String vin) {
         List<CarPositionDocument> unprocessed = new ArrayList<>(carPositionRepository
                 .findByVinAndProcessedFalseOrderByTimestampAsc(vin));
-
         if (unprocessed.isEmpty()) {
             checkTripTimeout(vin);
-            log.info("No data points for {} ", vin);
+            log.info("No new GPS location points for {} ", vin);
             return;
         }
 
@@ -50,6 +49,7 @@ public class AnalyticsService {
 
         // get or create current trip
         Optional<CurrentTripDocument> existingTrip = currentTripRepository.findByVin(vin);
+
         existingTrip.ifPresent(trip -> {
             CarPositionDocument bridge = new CarPositionDocument();
             bridge.setVin(vin);
@@ -64,8 +64,9 @@ public class AnalyticsService {
 
         //discard any LATE arriving document ...
          // these are the docs which were recorded BEFORE the currentExistingTrip concluded
-         unprocessed.removeIf(doc ->
-                 doc.getTimestamp() <= existingTrip.get().getLastUpdateTimestamp());
+         existingTrip.ifPresent( trip ->
+             unprocessed.removeIf(doc ->
+                 doc.getTimestamp() <= trip.getLastUpdateTimestamp()));
          if (unprocessed.isEmpty()) {
              checkTripTimeout(vin);
              return;
@@ -95,7 +96,7 @@ public class AnalyticsService {
                 continue;
             }
             if (distanceMeters > 1000 && timeDeltaSeconds < 10) {
-                log.warn("Suspicious position jump for VIN: {} distance: {}m in {}s",
+                log.warn("SUSPICIOUS POSITION JUMP [GPS anomaly] for VIN: {} distance: {}m in {}s",
                         vin, String.format("%.2f", distanceMeters), timeDeltaSeconds);
                 continue;
             }
@@ -115,12 +116,139 @@ public class AnalyticsService {
         }
         // save updated trip
         currentTripRepository.save(currentTrip);
+/*
+        log.info("VIN: {} trip distance: {}m avg speed: {}kph max speed: {}kph",
+                vin,
+                String.format("%.2f", currentTrip.getTotalDistanceMeters()),
+                String.format("%.2f", currentTrip.getAverageSpeedKph()),
+                String.format("%.2f", currentTrip.getMaxSpeedKph()));
+  */
+    }
+
+    void processVin (String vin) {
+        List<CarPositionDocument> unprocessed = getUnprocessedDocs(vin);
+        if (unprocessed.isEmpty()) {
+            checkTripTimeout(vin);
+            return;
+        }
+
+        Optional<CurrentTripDocument> existingTrip = currentTripRepository.findByVin(vin);
+
+        prepareDocumentList(vin, existingTrip, unprocessed);
+        if (unprocessed.size() <= 1) {
+            checkTripTimeout(vin);
+            return;
+        }
+
+        CurrentTripDocument currentTrip = existingTrip
+                .orElseGet(() -> createNewTrip(vin, unprocessed.getFirst()));
+
+        processSegments(vin, unprocessed, currentTrip);
+        markLastDocAsProcessed(unprocessed);
+        currentTripRepository.save(currentTrip);
 
         log.info("VIN: {} trip distance: {}m avg speed: {}kph max speed: {}kph",
                 vin,
                 String.format("%.2f", currentTrip.getTotalDistanceMeters()),
                 String.format("%.2f", currentTrip.getAverageSpeedKph()),
                 String.format("%.2f", currentTrip.getMaxSpeedKph()));
+    }
+
+    private List<CarPositionDocument> getUnprocessedDocs(String vin) {
+        return new ArrayList<>(carPositionRepository
+                .findByVinAndProcessedFalseOrderByTimestampAsc(vin));
+    }
+
+    private void prepareDocumentList (String vin,
+                                      Optional<CurrentTripDocument> currentTrip,
+                                      List<CarPositionDocument> unprocessed) {
+        //discard any LATE arriving documents ...
+        // these are the docs which were recorded BEFORE the currentExistingTrip concluded
+        currentTrip.ifPresent( trip ->
+                unprocessed.removeIf(doc ->
+                        doc.getTimestamp() <= trip.getLastUpdateTimestamp()));
+
+        //build the bridge to pre-existing unexpired trip
+        currentTrip.ifPresent(trip -> {
+            CarPositionDocument bridge = new CarPositionDocument();
+            bridge.setVin(vin);
+            bridge.setLatitude(trip.getLastLat());
+            bridge.setLongitude(trip.getLastLon());
+            bridge.setTimestamp(trip.getLastUpdateTimestamp());
+            bridge.setProcessed(true);
+            unprocessed.add(0,bridge);
+        });
+
+
+    }
+
+    private void processSegments (String vin, List<CarPositionDocument> unprocessed, CurrentTripDocument currentTrip) {
+        for (int i = 0; i < unprocessed.size() - 1; i++) {
+            CarPositionDocument from = unprocessed.get(i);
+            CarPositionDocument to = unprocessed.get(i + 1);
+
+            double distanceMeters = haversine(
+                    from.getLatitude(), from.getLongitude(),
+                    to.getLatitude(), to.getLongitude()
+            );
+
+            double computedSpeedKph = computeSpeedKph(distanceMeters, from.getTimestamp(), to.getTimestamp());
+            double timeDeltaSeconds = (to.getTimestamp() - from.getTimestamp()) / 1000.0;
+            if (computedSpeedKph > 300) {  // suspicious threshold
+                log.warn("SUSPICIOUS SPEED [GPS anomaly] for VIN: {} speed: {}kph distance: {}m timeDelta: {}s from: ({},{}) to: ({},{})",
+                        vin,
+                        String.format("%.2f", computedSpeedKph),
+                        String.format("%.2f", distanceMeters),
+                        timeDeltaSeconds,
+                        from.getLatitude(), from.getLongitude(),
+                        to.getLatitude(), to.getLongitude()
+                );
+                continue;
+            }
+            if (distanceMeters > 1000 && timeDeltaSeconds < 10) {
+                log.warn("SUSPICIOUS POSITION JUMP [GPS anomaly] for VIN: {} distance: {}m in {}s",
+                        vin, String.format("%.2f", distanceMeters), timeDeltaSeconds);
+                continue;
+            }
+            updateTrip(currentTrip, to, distanceMeters, computedSpeedKph);
+
+            if (!from.isProcessed()) {
+                from.setProcessed(true);
+                carPositionRepository.save(from);
+            }
+        }
+    }
+
+    private void markLastDocAsProcessed (List<CarPositionDocument> unprocessed) {
+        // mark last document as processed
+        CarPositionDocument last = unprocessed.get(unprocessed.size() - 1);
+        if(!last.isProcessed()) {
+            last.setProcessed(true);
+            carPositionRepository.save(last);
+        }
+    }
+
+    /**
+     * given a VIN system checks if there is an existing _active_ trip for this vehicle.
+     * If so it pre-appends the list of unprocessed CarPositionDocument(s) with a "bridge" CarPositionDocument
+     * to link the new positions with the existing trip.
+     * If not it would pre-append an empty CarPositionDocument.
+     */
+    private CurrentTripDocument buildBridge(String vin, List<CarPositionDocument> unprocessed) {
+        Optional<CurrentTripDocument> existingTrip = currentTripRepository.findByVin(vin);
+        existingTrip.ifPresent(trip -> {
+            CarPositionDocument bridge = new CarPositionDocument();
+            bridge.setVin(vin);
+            bridge.setLatitude(trip.getLastLat());
+            bridge.setLongitude(trip.getLastLon());
+            bridge.setTimestamp(trip.getLastUpdateTimestamp());
+            bridge.setProcessed(true);
+            unprocessed.add(0,bridge);
+        });
+        CurrentTripDocument currentTrip = existingTrip
+                .orElseGet(() -> createNewTrip(vin, unprocessed.getFirst()));
+
+        return currentTrip;
     }
 
     private void updateTrip (CurrentTripDocument currentTrip, CarPositionDocument to, double distanceMeters, double computedSpeedKph) {

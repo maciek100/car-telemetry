@@ -154,20 +154,22 @@ public class AnalyticsServiceTest {
         String vin = "1HGBH41JXMN109186";
         // GIVEN
         // - two unprocessed CarPositionDocuments for a VIN
+        long timeNow = System.currentTimeMillis();
         CarPositionDocument doc1 = new CarPositionDocument();
         doc1.setVin(vin);
-        doc1.setTimestamp(11000L);
+        doc1.setTimestamp(timeNow + 11000L);
         doc1.setLatitude(30.266);
         doc1.setLongitude(-97.730);
         CarPositionDocument doc2 = new CarPositionDocument();
         doc2.setVin(vin);
-        doc2.setTimestamp(21000L);
+        doc2.setTimestamp(timeNow + 21000L);
         doc2.setLatitude(30.265);
         doc2.setLongitude(-97.731);
 
         List<CarPositionDocument> carPositionDocs = List.of(doc1, doc2);
+        CurrentTripDocument existingTrip = buildExistingTrip(vin, timeNow);
         when(carPositionRepository.findByVinAndProcessedFalseOrderByTimestampAsc(vin)).thenReturn(carPositionDocs);
-        when(currentTripRepository.findByVin(vin)).thenReturn(Optional.of(buildExistingTrip(vin, System.currentTimeMillis())));
+        when(currentTripRepository.findByVin(vin)).thenReturn(Optional.of(existingTrip));
 
 
         // WHEN
@@ -184,11 +186,11 @@ public class AnalyticsServiceTest {
         assertEquals(30.266, savedTrip.getStartLat());
         assertEquals(-97.730, savedTrip.getStartLon());
         assertEquals( 5, savedTrip.getTotalReadings());
-        assertEquals( 21000L, savedTrip.getLastUpdateTimestamp());
+        assertEquals( timeNow + 21000L, savedTrip.getLastUpdateTimestamp());
         assertEquals( 30.265, savedTrip.getLastLat());
         assertEquals( -97.731, savedTrip.getLastLon());
         assertEquals(10413.93, savedTrip.getTotalDistanceMeters(), 1.0);
-        assertEquals(40.88, savedTrip.getAverageSpeedKph());
+        assertEquals(58.35, savedTrip.getAverageSpeedKph());
     }
 
     @Test
