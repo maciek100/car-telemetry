@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongodb/mongodb-community-server:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+
+  car-consumer:
+    build: ./car-consumer
+    container_name: car-consumer
+    depends_on:
+      - mongodb
+    ports:
+      - "9090:9090"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/cartelemetry
+      GRPC_SERVER_PORT: 9090
+
+  car-producer:
+    build: ./car-producer
+    container_name: car-producer
+    depends_on:
+      - car-consumer
+    environment:
+      GRPC_CLIENT_CAR-CONSUMER_ADDRESS: static://car-consumer:9090
+      GRPC_CLIENT_CAR-CONSUMER_NEGOTIATION-TYPE: plaintext
+      GENERATOR_VEHICLE_COUNT: 10
+
+volumes:
+  mongodb-data:
