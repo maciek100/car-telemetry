@@ -37,10 +37,9 @@ public class AnalyticsService {
      * Manual triggers via REST API are async - annotated with @Async
      * This separation ensures scheduled runs don't block and manual triggers
      * return immediately to the caller.
-     *
      * See AnalyticsController.triggerProcessing() for manual trigger implementation.
      */
-    @Scheduled(fixedRate = 300000) // every 5 minutes
+    @Scheduled(fixedRateString = "${analytics.schedule.rate:600000}") // every 5 minutes
     public void scheduledAnalytics () {
         processAnalytics();
     }
@@ -52,9 +51,10 @@ public class AnalyticsService {
         }
         lastTriggeredAt = System.currentTimeMillis();
         try {
-            log.info("Running analytics...");
+            log.info("Analytics started...");
             mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class)
                     .forEach(this::processVin);
+            log.info("Analytics completed in {}ms", System.currentTimeMillis() - lastTriggeredAt);
         } finally {
             running.set(false);
         }
