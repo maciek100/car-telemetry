@@ -33,18 +33,17 @@
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 
-		<!-- gRPC Server -->
-		<dependency>
-			<groupId>net.devh</groupId>
-			<artifactId>grpc-server-spring-boot-starter</artifactId>
-			<version>3.1.0.RELEASE</version>
-		</dependency>
-
 		<!-- Protobuf -->
 		<dependency>
 			<groupId>com.google.protobuf</groupId>
 			<artifactId>protobuf-java</artifactId>
 			<version>${protobuf.version}</version>
+		</dependency>
+
+		<!-- Kafka -->
+		<dependency>
+			<groupId>org.springframework.kafka</groupId>
+			<artifactId>spring-kafka</artifactId>
 		</dependency>
 
 		<!-- Required for generated code -->
@@ -108,7 +107,7 @@
 					<execution>
 						<goals>
 							<goal>compile</goal>
-							<goal>compile-custom</goal>
+							<!--goal>compile-custom</goal-->
 						</goals>
 					</execution>
 				</executions>
