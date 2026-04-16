@@ -1,5 +1,6 @@
 package com.cartelemetry.car_consumer.controller;
 
+import com.cartelemetry.car_consumer.dto.ErrorResponse;
 import com.cartelemetry.car_consumer.model.CarPositionDocument;
 import com.cartelemetry.car_consumer.model.CompletedTripDocument;
 import com.cartelemetry.car_consumer.model.CurrentTripDocument;
@@ -11,11 +12,13 @@ import com.cartelemetry.car_consumer.repository.SpeedAlertRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.print.attribute.standard.PageRanges;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/vehicles")
@@ -37,10 +40,15 @@ public class VehicleController {
 
     // GET /vehicles/{vin}/trip/current
     @GetMapping("/{vin}/trip/current")
-    public ResponseEntity<CurrentTripDocument> getCurrentTrip(@PathVariable String vin) {
-        return currentTripRepository.findByVin(vin)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getCurrentTrip(@PathVariable String vin) {
+        Optional<CurrentTripDocument> trip = currentTripRepository.findByVin(vin);
+        if (trip.isPresent())
+            return ResponseEntity.ok(trip.get());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(
+                        "Vehicle not found :" + vin,
+                        404,
+                        System.currentTimeMillis()));
     }
 
     // GET /vehicles/{vin}/trips

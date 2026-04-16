@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface SpeedAlertRepository extends MongoRepository<SpeedAlertDocument, String> {
     List<SpeedAlertDocument> findByVinOrderByTimestampDesc(String vin);
+    long countByVin(String vin);
 }

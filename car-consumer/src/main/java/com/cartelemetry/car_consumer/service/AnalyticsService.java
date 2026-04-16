@@ -6,12 +6,14 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @RequiredArgsConstructor
@@ -27,104 +29,36 @@ public class AnalyticsService {
     private final CompletedTripRepository completedTripRepository;
     private final SpeedAlertRepository speedAlertRepository;
 
-    @Scheduled(fixedRate = 300000) // every 5 minutes
-    public void processAnalytics() {
-        log.info("Running analytics...");
-        List<String> vins = mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class);
-        for (String vin : vins) {
-            processVin(vin);
-        }
-    }
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private volatile long lastTriggeredAt = 0;
 
-     void processVinBefore(String vin) {
-        List<CarPositionDocument> unprocessed = new ArrayList<>(carPositionRepository
-                .findByVinAndProcessedFalseOrderByTimestampAsc(vin));
-        if (unprocessed.isEmpty()) {
-            checkTripTimeout(vin);
-            log.info("No new GPS location points for {} ", vin);
+    /**
+     * Scheduled runs are synchronous - called directly from scheduledAnalytics()
+     * Manual triggers via REST API are async - annotated with @Async
+     * This separation ensures scheduled runs don't block and manual triggers
+     * return immediately to the caller.
+     *
+     * See AnalyticsController.triggerProcessing() for manual trigger implementation.
+     */
+    @Scheduled(fixedRate = 300000) // every 5 minutes
+    public void scheduledAnalytics () {
+        processAnalytics();
+    }
+    @Async
+    public void processAnalytics() {
+        if (!running.compareAndSet(false, true)) {
+            log.info("Analytics already running, skipping...");
             return;
         }
-
-        log.info("Processing {} unprocessed records for VIN: {}", unprocessed.size(), vin);
-
-        // get or create current trip
-        Optional<CurrentTripDocument> existingTrip = currentTripRepository.findByVin(vin);
-
-        existingTrip.ifPresent(trip -> {
-            CarPositionDocument bridge = new CarPositionDocument();
-            bridge.setVin(vin);
-            bridge.setLatitude(trip.getLastLat());
-            bridge.setLongitude(trip.getLastLon());
-            bridge.setTimestamp(trip.getLastUpdateTimestamp());
-            bridge.setProcessed(true);
-            unprocessed.add(0,bridge);
-        });
-        CurrentTripDocument currentTrip = existingTrip
-                .orElseGet(() -> createNewTrip(vin, unprocessed.getFirst()));
-
-        //discard any LATE arriving document ...
-         // these are the docs which were recorded BEFORE the currentExistingTrip concluded
-         existingTrip.ifPresent( trip ->
-             unprocessed.removeIf(doc ->
-                 doc.getTimestamp() <= trip.getLastUpdateTimestamp()));
-         if (unprocessed.isEmpty()) {
-             checkTripTimeout(vin);
-             return;
-         }
-
-         // process each consecutive pair
-        for (int i = 0; i < unprocessed.size() - 1; i++) {
-            CarPositionDocument from = unprocessed.get(i);
-            CarPositionDocument to = unprocessed.get(i + 1);
-
-            double distanceMeters = haversine(
-                    from.getLatitude(), from.getLongitude(),
-                    to.getLatitude(), to.getLongitude()
-            );
-
-            double computedSpeedKph = computeSpeedKph(distanceMeters, from.getTimestamp(), to.getTimestamp());
-            double timeDeltaSeconds = (to.getTimestamp() - from.getTimestamp()) / 1000.0;
-            if (computedSpeedKph > 300) {  // suspicious threshold
-                log.warn("SUSPICIOUS SPEED [GPS anomaly] for VIN: {} speed: {}kph distance: {}m timeDelta: {}s from: ({},{}) to: ({},{})",
-                        vin,
-                        String.format("%.2f", computedSpeedKph),
-                        String.format("%.2f", distanceMeters),
-                        timeDeltaSeconds,
-                        from.getLatitude(), from.getLongitude(),
-                        to.getLatitude(), to.getLongitude()
-                );
-                continue;
-            }
-            if (distanceMeters > 1000 && timeDeltaSeconds < 10) {
-                log.warn("SUSPICIOUS POSITION JUMP [GPS anomaly] for VIN: {} distance: {}m in {}s",
-                        vin, String.format("%.2f", distanceMeters), timeDeltaSeconds);
-                continue;
-            }
-            updateTrip(currentTrip, to, distanceMeters, computedSpeedKph);
-
-            if (!from.isProcessed()) {
-                from.setProcessed(true);
-                carPositionRepository.save(from);
-            }
+        lastTriggeredAt = System.currentTimeMillis();
+        try {
+            log.info("Running analytics...");
+            mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class)
+                    .forEach(this::processVin);
+        } finally {
+            running.set(false);
         }
-
-        // mark last document as processed
-        CarPositionDocument last = unprocessed.get(unprocessed.size() - 1);
-        if(!last.isProcessed()) {
-            last.setProcessed(true);
-            carPositionRepository.save(last);
-        }
-        // save updated trip
-        currentTripRepository.save(currentTrip);
-/*
-        log.info("VIN: {} trip distance: {}m avg speed: {}kph max speed: {}kph",
-                vin,
-                String.format("%.2f", currentTrip.getTotalDistanceMeters()),
-                String.format("%.2f", currentTrip.getAverageSpeedKph()),
-                String.format("%.2f", currentTrip.getMaxSpeedKph()));
-  */
     }
-
     void processVin (String vin) {
         List<CarPositionDocument> unprocessed = getUnprocessedDocs(vin);
         if (unprocessed.isEmpty()) {
@@ -350,5 +284,13 @@ public class AnalyticsService {
         double timeDeltaSeconds = (toTimestamp - fromTimestamp) / 1000.0;
         if (timeDeltaSeconds <= 0) return 0;
         return (distanceMeters / timeDeltaSeconds) * 3.6;
+    }
+
+    public boolean isRunning () {
+        return running.get();
+    }
+
+    public long getLastTriggeredAt () {
+        return lastTriggeredAt;
     }
 }

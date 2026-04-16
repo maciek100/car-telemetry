@@ -16,6 +16,7 @@ services:
       - mongodb
     ports:
       - "9090:9090"
+      - "8080:8080"
     environment:
       SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/cartelemetry
       GRPC_SERVER_PORT: 9090
