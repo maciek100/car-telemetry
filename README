@@ -1,0 +1,74 @@
+# Car Telemetry System — Kafka Implementation
+
+## Overview
+Evolution of the gRPC implementation replacing synchronous gRPC transport
+with asynchronous Kafka messaging. Same functionality, better scalability
+and decoupling.
+
+## Architecture
+[Car Producer] → Kafka Topic → [Car Consumer] → MongoDB
+(car-positions)      ↓
+[Analytics Service]
+↓
+[REST API :8080]
+
+## Tech Stack
+- **Java 21** + **Spring Boot 3.2.5**
+- **Kafka** — asynchronous transport (KRaft mode, no Zookeeper)
+- **Protobuf** — message serialization
+- **MongoDB** — storage for positions, trips and alerts
+- **Docker** — containerized deployment
+
+## Key Differences from gRPC Branch
+| | gRPC | Kafka |
+|---|---|---|
+| Communication | Synchronous | Asynchronous |
+| Coupling | Tight | Loose |
+| Producer needs consumer running | Yes | No |
+| Message replay | No | Yes |
+| Scalability | Limited | High |
+| Fault tolerance | Low | High |
+
+## Running the System
+```bash
+# start all services
+docker-compose up --build
+
+# verify data flowing
+curl http://localhost:8080/vehicles | jq
+curl http://localhost:8080/analytics/summary | jq
+```
+
+## Kafka Topic
+- **Topic:** `car-positions`
+- **Key:** VIN (ensures ordering per vehicle)
+- **Value:** Protobuf serialized `CarPosition`
+- **Partitioning:** by VIN key
+
+## REST API
+| Endpoint | Description |
+|---|---|
+| `GET /vehicles` | List all vehicle VINs |
+| `GET /vehicles/{vin}/trip/current` | Active trip |
+| `GET /vehicles/{vin}/trips` | Completed trips |
+| `GET /vehicles/{vin}/alerts` | Speed alerts |
+| `GET /vehicles/{vin}/positions` | Recent positions |
+| `GET /analytics/summary` | Fleet summary |
+| `GET /analytics/{vin}/summary` | Vehicle summary |
+| `POST /analytics/process` | Trigger analytics |
+
+## Why Kafka over gRPC?
+- Producer and consumer are fully decoupled
+- Producer doesn't need consumer to be running
+- Messages are persisted in Kafka — replay on consumer restart
+- Naturally scales to multiple producers and consumers
+- Foundation for Flink stream processing (see `flink` branch)
+
+## Limitations
+- Scheduled batch analytics — not truly real-time
+- Analytics runs every 10 minutes or on-demand via REST
+- See `flink` branch for real-time stream processing solution
+
+## Next Steps
+See `flink` branch for Apache Flink implementation replacing
+scheduled analytics with real-time stream processing.
