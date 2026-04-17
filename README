@@ -1,0 +1,53 @@
+# Car Telemetry System — gRPC Implementation
+
+## Overview
+A real-time vehicle telemetry system that collects, processes and analyzes
+GPS position data from a fleet of vehicles.
+
+## Architecture
+[Car Producer] → gRPC → [Car Consumer] → MongoDB
+↓
+[Analytics Service]
+↓
+[REST API :8080]
+
+## Tech Stack
+- **Java 21** + **Spring Boot 3.2.5**
+- **gRPC** — synchronous transport between producer and consumer
+- **Protobuf** — message serialization
+- **MongoDB** — storage for positions, trips and alerts
+- **Docker** — containerized deployment
+
+## Running the System
+```bash
+# start all services
+docker-compose up --build
+
+# verify data flowing
+curl http://localhost:8080/vehicles | jq
+curl http://localhost:8080/analytics/summary | jq
+```
+
+## REST API
+| Endpoint | Description |
+|---|---|
+| `GET /vehicles` | List all vehicle VINs |
+| `GET /vehicles/{vin}/trip/current` | Active trip |
+| `GET /vehicles/{vin}/trips` | Completed trips |
+| `GET /vehicles/{vin}/alerts` | Speed alerts |
+| `GET /vehicles/{vin}/positions` | Recent positions |
+| `GET /analytics/summary` | Fleet summary |
+| `GET /analytics/{vin}/summary` | Vehicle summary |
+| `POST /analytics/process` | Trigger analytics |
+
+## Why gRPC?
+- Simple direct communication between two services
+- Strongly typed contracts via Protobuf
+- Synchronous — easy to reason about
+- Good starting point before introducing async messaging
+
+## Limitations
+- Tight coupling between producer and consumer
+- Producer must wait for consumer response
+- Consumer must be running before producer starts
+- Doesn't scale well with multiple producers/consumers
