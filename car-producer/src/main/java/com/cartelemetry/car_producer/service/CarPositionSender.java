@@ -20,9 +20,6 @@ public class CarPositionSender {
     @Scheduled(fixedRate = 1000)
     public void send() {
         generator.generateAll().forEach(carPosition -> {
-            // your code here!
-            // hint: carPosition.toByteArray() serializes to bytes
-            // hint: use VIN as the message key
             kafkaTemplate.send(TOPIC, carPosition.getVin(), carPosition.toByteArray());
             log.info("Sent CarPosition for VIN: {}", carPosition.getVin());
         });
