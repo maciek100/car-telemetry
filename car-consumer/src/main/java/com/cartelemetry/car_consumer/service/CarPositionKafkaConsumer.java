@@ -40,8 +40,6 @@ public class CarPositionKafkaConsumer {
                 log.warn("Duplicate position ignored for VIN: {} timestamp: {}",
                         doc.getVin(), doc.getTimestamp());
             }
-
-            log.info("Saved CarPosition for VIN: {}", doc.getVin());
         } catch (InvalidProtocolBufferException e) {
             log.error("Failed to deserialize CarPosition from topic: {} offset: {}",
                     record.topic(), record.offset(), e);
