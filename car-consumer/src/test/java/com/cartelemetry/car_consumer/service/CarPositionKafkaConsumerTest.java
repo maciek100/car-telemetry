@@ -5,20 +5,18 @@ import com.cartelemetry.car_consumer.repository.CarPositionRepository;
 import com.cartelemetry.proto.CarPosition;
 import com.cartelemetry.proto.GpsLocation;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.protocol.types.Field;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-
-import org.springframework.dao.DuplicateKeyException;
 
 @ExtendWith(MockitoExtension.class)
 class CarPositionKafkaConsumerTest {
@@ -42,9 +40,7 @@ class CarPositionKafkaConsumerTest {
                         .setLongitude(-97.730)
                         .build())
                 .setSpeed(50.5)
-                .setEngineTemp(195.0)
-                .setGasTankLevel(0.75)
-                .setObd2ErrorCode("")
+                .setHeading(127.5)
                 .build();
         byte[] payLoad = carPosition.toByteArray();
         ConsumerRecord<String, byte[]> record = new ConsumerRecord<>(
@@ -65,9 +61,7 @@ class CarPositionKafkaConsumerTest {
         assertEquals(30.266, saved.getLatitude());
         assertEquals(-97.730, saved.getLongitude());
         assertEquals(50.5, saved.getSpeed());
-        assertEquals(195.0, saved.getEngineTemp());
-        assertEquals(0.75, saved.getGasTankLevel());
-        assertEquals("", saved.getObd2ErrorCode());
+        assertEquals(127.5, saved.getHeading());
         assertFalse(saved.isProcessed());
     }
 
@@ -83,9 +77,6 @@ class CarPositionKafkaConsumerTest {
                         .setLongitude(-97.730)
                         .build())
                 .setSpeed(50.5)
-                .setEngineTemp(195.0)
-                .setGasTankLevel(0.75)
-                .setObd2ErrorCode("")
                 .build();
         byte[] payLoad = carPosition.toByteArray();
         ConsumerRecord<String, byte[]> record = new ConsumerRecord<>(

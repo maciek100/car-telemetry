@@ -10,10 +10,14 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +36,39 @@ public class AnalyticsService {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile long lastTriggeredAt = 0;
 
+    public static Function<Long, String> prettyTime = number -> Instant.ofEpochMilli(number)
+            .atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
+
+    public static Function<Long, String> prettyDuration = millis -> {
+        long hours = millis / 3_600_000;
+        long minutes = (millis % 3_600_000) / 60_000;
+        long seconds = (millis % 60_000) / 1_000;
+        long ms = millis % 1_000;
+
+        if (hours > 0)
+            return String.format("%dh%02dm%02ds", hours, minutes, seconds);
+        if (minutes > 0)
+            return String.format("%dm%02ds%03d", minutes, seconds, ms);
+        if (seconds > 0)
+            return String.format("%ds%03dms", seconds, ms);
+        return String.format("%dms", ms);
+    };
+
+    public static String formatuuuDuration(long millis) {
+        long hours = millis / 3_600_000;
+        long minutes = (millis % 3_600_000) / 60_000;
+        long seconds = (millis % 60_000) / 1_000;
+        long ms = millis % 1_000;
+
+        if (hours > 0)
+            return String.format("%dh%02dm%02ds", hours, minutes, seconds);
+        if (minutes > 0)
+            return String.format("%dm%02ds%03d", minutes, seconds, ms);
+        if (seconds > 0)
+            return String.format("%ds%03dms", seconds, ms);
+        return String.format("%dms", ms);
+    }
     /**
      * Scheduled runs are synchronous - called directly from scheduledAnalytics()
      * Manual triggers via REST API are async - annotated with @Async
@@ -51,10 +88,12 @@ public class AnalyticsService {
         }
         lastTriggeredAt = System.currentTimeMillis();
         try {
-            log.info("Analytics started...");
+            log.info("Analytics started at {}", prettyTime.apply(System.currentTimeMillis()));
             mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class)
                     .forEach(this::processVin);
-            log.info("Analytics completed in {}ms", System.currentTimeMillis() - lastTriggeredAt);
+            currentTripRepository.findAll()
+                            .forEach(trip -> checkTripTimeout(trip.getVin()));
+            log.info("Analytics completed in {}ms", prettyDuration.apply(System.currentTimeMillis() - lastTriggeredAt));
         } finally {
             running.set(false);
         }
@@ -212,8 +251,11 @@ public class AnalyticsService {
     private void checkTripTimeout(String vin) {
         currentTripRepository.findByVin(vin).ifPresent(trip -> {
             long now = System.currentTimeMillis();
-            if (now - trip.getLastUpdateTimestamp() > TRIP_TIMEOUT_MS) {
-                log.info("Trip timeout for VIN: {} — completing trip", vin);
+            long diff = now - trip.getLastUpdateTimestamp();
+            log.info("JACK1 VIN: {} last update {}ms ago, timeout at {}ms",
+                    vin, diff, TRIP_TIMEOUT_MS);
+            if (diff > TRIP_TIMEOUT_MS) {
+                log.info("JACK2 Trip timeout for VIN: {} — completing trip", vin);
                 completeTrip(trip);
             }
         });

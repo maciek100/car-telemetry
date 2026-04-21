@@ -16,8 +16,6 @@ public class CarPositionDocument {
     private double latitude;
     private double longitude;
     private double speed;
-    private double engineTemp;
-    private double gasTankLevel;
-    private String obd2ErrorCode;
+    private double heading;
     private boolean processed = false;
 }

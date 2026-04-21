@@ -8,8 +8,6 @@ import com.cartelemetry.car_consumer.repository.CarPositionRepository;
 import com.cartelemetry.car_consumer.repository.CompletedTripRepository;
 import com.cartelemetry.car_consumer.repository.CurrentTripRepository;
 import com.cartelemetry.car_consumer.repository.SpeedAlertRepository;
-import com.cartelemetry.proto.CarPosition;
-import com.cartelemetry.proto.CarPositionResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -17,7 +15,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.security.Timestamp;
 import java.util.List;
 import java.util.Optional;
 
@@ -404,5 +401,13 @@ public class AnalyticsServiceTest {
 
         //THEN
         verify(currentTripRepository, never()).save(any());
+    }
+
+    @Test
+    public void testTimeBeautifiers () {
+        long timeNow = System.currentTimeMillis();
+        long timeThen = timeNow - (4 * 3600L * 1000_000_000 + 13 * 60L * 1000_000 + 19 * 1000 +  456);
+        System.out.println(AnalyticsService.prettyDuration.apply(timeNow - timeThen));
+        System.out.println(AnalyticsService.prettyTime.apply(timeNow));
     }
 }

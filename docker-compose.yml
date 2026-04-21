@@ -29,7 +29,7 @@ services:
       - kafka
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      GENERATOR_VEHICLE_COUNT: 10
+      GENERATOR_VEHICLE_COUNT: 4
 
   kafka:
     image: confluentinc/cp-kafka:7.6.0

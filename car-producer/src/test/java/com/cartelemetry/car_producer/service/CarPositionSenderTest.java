@@ -2,15 +2,16 @@ package com.cartelemetry.car_producer.service;
 
 import com.cartelemetry.proto.CarPosition;
 import com.cartelemetry.proto.GpsLocation;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.stream.IntStream;
 
 import static org.mockito.Mockito.*;
 
@@ -25,6 +26,12 @@ class CarPositionSenderTest {
 
     @InjectMocks
     private CarPositionSender sender;
+
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(sender, "positionsTopic", "car-positions");
+        //ReflectionTestUtils.setField(sender, "diagnosticsTopic", "car-diagnostics");
+    }
 
     @Test
     void sendsOneMessagePerVehicle() {
@@ -45,17 +52,15 @@ class CarPositionSenderTest {
     private CarPosition moveCar(CarPosition cp) {
         if (cp == null)
             return CarPosition.newBuilder()
-                .setVin("VIN123")
-                .setTimestamp(10000000)
-                .setLocation(GpsLocation.newBuilder()
-                        .setLatitude(30.266)
-                        .setLongitude(-97.730)
-                        .build())
-                .setSpeed(50.5)
-                .setEngineTemp(195.0)
-                .setGasTankLevel(0.75)
-                .setObd2ErrorCode("")
-                .build();
+                    .setVin("VIN123")
+                    .setTimestamp(10000000)
+                    .setLocation(GpsLocation.newBuilder()
+                            .setLatitude(30.266)
+                            .setLongitude(-97.730)
+                            .build())
+                    .setSpeed(50.5)
+                    .setHeading(127.5)
+                    .build();
         return CarPosition.newBuilder()
                 .setVin(cp.getVin())
                 .setTimestamp(cp.getTimestamp() + 1005)
@@ -64,9 +69,7 @@ class CarPositionSenderTest {
                         .setLongitude(cp.getLocation().getLongitude() + 0.001)
                         .build())
                 .setSpeed(cp.getSpeed())
-                .setEngineTemp(cp.getEngineTemp())
-                .setGasTankLevel(cp.getGasTankLevel())
-                .setObd2ErrorCode(cp.getObd2ErrorCode())
+                .setHeading(127.5)
                 .build();
     }
 }

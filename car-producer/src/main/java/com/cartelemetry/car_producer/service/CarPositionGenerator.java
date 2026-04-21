@@ -1,5 +1,6 @@
 package com.cartelemetry.car_producer.service;
 
+import com.cartelemetry.proto.CarDiagnostics;
 import com.cartelemetry.proto.CarPosition;
 import com.cartelemetry.proto.GpsLocation;
 
@@ -10,16 +11,17 @@ import java.util.stream.Collectors;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class CarPositionGenerator {
-    private static Logger log = LoggerFactory.getLogger(CarPositionGenerator.class);
+    private static final Logger log = LoggerFactory.getLogger(CarPositionGenerator.class);
     private static final Random random = new Random();
-    @Value("${generator.vehicle.count:3}")
-    private int vehicleCount;
+    private final VehicleRegistry vehicleRegistry;
 
+    public CarPositionGenerator(VehicleRegistry vehicleRegistry) {
+        this.vehicleRegistry = vehicleRegistry;
+    }
     private record VehicleLocation(
             double latitude,
             double longitude,
@@ -40,36 +42,45 @@ public class CarPositionGenerator {
     private static final Map<String, VehicleLocation> vehicleStates = new HashMap<>();
     private static List<String> vinList;
 
-    public CarPositionGenerator() {}
+
 
     @PostConstruct
     public void init () {
-        for (int i = 0; i < vehicleCount; i++) {
-            String vin = makeVin(i);
+
+        vinList = vehicleRegistry.getVins();
+        for (String vin : vinList) {
+            boolean initialStop = random.nextBoolean();
+            Instant stopUntil = initialStop ?
+                    Instant.now().plusSeconds(random.nextInt(180)) : null;
             vehicleStates.put(vin, new VehicleLocation(
                     30.266 + random.nextDouble() * 0.1,
                     -97.730 + random.nextDouble() * 0.1,
                             random.nextDouble() * 360,
-                    false,
-                    null));
+                    initialStop,
+                    stopUntil));
         }
-        vinList = vehicleStates.keySet().stream().toList();
     }
 
     private static String makeVin(int index) {
         return String.format("VIN%06d", index);
     }
 
-    private CarPosition generate(String vin) {
+    private CarPosition generatePosition(String vin) {
         VehicleLocation vehicleLocation = vehicleStates.get(vin);
         if (vehicleLocation.stopped()) {
-            log.info("Vehicle {} is stopped until {}", vin, vehicleLocation.stopUntil);
-            return null;
+            if (Instant.now().isAfter(vehicleLocation.stopUntil())) {
+                log.info("vehicle {} resuming", vin);
+                vehicleStates.put(vin, vehicleLocation.withMoving());
+            } else {
+                log.info("Vehicle {} is stopped until {}", vin, vehicleLocation.stopUntil);
+                return null;
+            }
         }
         if (random.nextInt(100) < 2) {
             Instant stopUntil = Instant.now().plusSeconds(random.nextInt(300) + 300);
             vehicleStates.put(vin, vehicleLocation.withStopped(stopUntil));
             log.info("Vehicle {} stopping until {}", vin, stopUntil);
+            return null;
         }
         log.info("Vehicle ABC {}", vehicleLocation);
         if (vehicleLocation.stopped)
@@ -81,20 +92,18 @@ public class CarPositionGenerator {
         return CarPosition.newBuilder()
                 .setVin(vin)
                 .setTimestamp(Instant.now().toEpochMilli())
-                .setEngineTemp(180 + random.nextDouble() * 40)
                 .setSpeed(random.nextDouble() * 120)
-                .setGasTankLevel(random.nextDouble())
-                .setObd2ErrorCode(random.nextInt(10) == 0 ? "P0420" : "")
                 .setLocation(GpsLocation.newBuilder()
                         .setLatitude(newLat)
                         .setLongitude(newLog)
                         .build())
+                .setHeading(newHeading)
                 .build();
     }
 
     public List<CarPosition> generateAll () {
         return vinList.stream()
-                .map(this::generate)
+                .map(this::generatePosition)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }

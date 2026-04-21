@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option java_package = "com.cartelemetry.proto";
+option java_outer_classname = "CarProto";
+option java_multiple_files = true;
+
+package cartelemetry;
+
+message GpsLocation {
+    double latitude = 1;
+    double longitude = 2;
+}
+
+message CarPosition {
+    string vin = 1;
+    int64 timestamp = 2;
+    GpsLocation location = 3;
+    double speed = 4;
+    double heading = 5;
+}
+
+message CarDiagnostics {
+    string vin = 1;
+    int64 timestamp = 2;
+    double engineTemp = 3;
+    double fuelLevel = 4;
+    repeated string obd2ErrorCodes = 5;
+    double batteryVoltage = 6;
+    double oilPressure = 7;
+    int32 rpm = 8;
+    int32 odometer = 9;
+    double tirePressureFL = 10;
+    double tirePressureFR = 11;
+    double tirePressureRL = 12;
+    double tirePressureRR = 13;
+}

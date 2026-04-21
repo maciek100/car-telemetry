@@ -66,12 +66,17 @@ public class AnalyticsController {
                         System.currentTimeMillis()));
         }
         TripAggregationResult stats = completedTripRepository.getTripStatsByVin(vin);
+
+        // handle no completed trips
+        double totalDistance = stats != null ? stats.totalDistance() : 0.0;
+        double avgSpeed = stats != null ? stats.avgSpeed() : 0.0;
+
         return ResponseEntity.ok(new VehicleSummaryDto(
                 vin,
                 currentTripRepository.findByVin(vin).orElse(null),
                 (int) completedTripRepository.countByVin(vin),
-                stats.totalDistance(),
-                stats.avgSpeed(),
+                totalDistance,
+                avgSpeed,
                 (int) speedAlertRepository.countByVin(vin),
                 analyticsService.getLastTriggeredAt()
         ));
