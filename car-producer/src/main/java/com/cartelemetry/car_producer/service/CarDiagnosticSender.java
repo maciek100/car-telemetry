@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 public class CarDiagnosticSender {
     private static final Logger log = LoggerFactory.getLogger(CarDiagnosticSender.class);
     @Value("${kafka.topic.diagnostics}")
-    private static String diagnosticsTopic;
+    private String diagnosticsTopic;
 
     private final KafkaTemplate<String, byte[]> kafkaTemplate;
     private final CarDiagnosticsGenerator generator;

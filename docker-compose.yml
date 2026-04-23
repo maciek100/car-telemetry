@@ -29,6 +29,8 @@ services:
       - kafka
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_POSITIONS: car-positions
+      KAFKA_TOPIC_DIAGNOSTICS: car-diagnostics
       GENERATOR_VEHICLE_COUNT: 4
 
   kafka:
