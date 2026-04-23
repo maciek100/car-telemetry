@@ -19,7 +19,7 @@ public class CarPositionSender {
     private final KafkaTemplate<String, byte[]> kafkaTemplate;
     private final CarPositionGenerator generator;
 
-    @Scheduled(fixedRate = 1000)
+    @Scheduled(fixedDelay = 1000)
     public void send() {
         generator.generateAll().forEach(carPosition -> {
             kafkaTemplate.send(positionsTopic, carPosition.getVin(), carPosition.toByteArray());
