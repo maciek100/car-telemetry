@@ -65,7 +65,7 @@ public class CarPositionGenerator {
         return String.format("VIN%06d", index);
     }
 
-    private CarPosition generatePosition(String vin) {
+    private CarPosition generatePosition(String vin, long batchTimestamp) {
         VehicleLocation vehicleLocation = vehicleStates.get(vin);
         if (vehicleLocation.stopped()) {
             if (Instant.now().isAfter(vehicleLocation.stopUntil())) {
@@ -76,7 +76,7 @@ public class CarPositionGenerator {
                 return null;
             }
         }
-        if (random.nextInt(100) < 2) {
+        if (random.nextInt(200) < 1) {
             Instant stopUntil = Instant.now().plusSeconds(random.nextInt(300) + 300);
             vehicleStates.put(vin, vehicleLocation.withStopped(stopUntil));
             log.info("Vehicle {} stopping until {}", vin, stopUntil);
@@ -91,7 +91,7 @@ public class CarPositionGenerator {
         vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading));
         return CarPosition.newBuilder()
                 .setVin(vin)
-                .setTimestamp(Instant.now().toEpochMilli())
+                .setTimestamp(batchTimestamp)
                 .setSpeed(random.nextDouble() * 120)
                 .setLocation(GpsLocation.newBuilder()
                         .setLatitude(newLat)
@@ -101,9 +101,9 @@ public class CarPositionGenerator {
                 .build();
     }
 
-    public List<CarPosition> generateAll () {
+    public List<CarPosition> generateAll (long batchTimestamp) {
         return vinList.stream()
-                .map(this::generatePosition)
+                .map(vin -> generatePosition(vin, batchTimestamp))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }

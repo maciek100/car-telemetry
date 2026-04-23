@@ -16,8 +16,8 @@ public class CarFlinkApplication {
 		KafkaSource<byte[]> source = KafkaSource.<byte[]>builder()
 				.setBootstrapServers("localhost:29092")
 				.setTopics("car-positions")
-				.setGroupId("car-flink-group")
-				.setStartingOffsets(OffsetsInitializer.earliest())
+				.setGroupId("car-flink-group-" + System.currentTimeMillis())
+				.setStartingOffsets(OffsetsInitializer.latest())
 				.setValueOnlyDeserializer(new ByteArrayDeserializationSchema())
 				.build();
 /*

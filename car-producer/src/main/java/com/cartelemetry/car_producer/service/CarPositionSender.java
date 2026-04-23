@@ -8,22 +8,27 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+
 @Service
 @RequiredArgsConstructor
 public class CarPositionSender {
 
     private static final Logger log = LoggerFactory.getLogger(CarPositionSender.class);
     @Value("${kafka.topic.positions}")
-    private static String positionsTopic;
+    private String positionsTopic;
 
     private final KafkaTemplate<String, byte[]> kafkaTemplate;
     private final CarPositionGenerator generator;
 
-    @Scheduled(fixedRate = 1000)
+    @Scheduled(fixedDelay = 1000)
     public void send() {
-        generator.generateAll().forEach(carPosition -> {
+        log.info("AABBCCD send() called at: {}", System.currentTimeMillis());
+        long batchTimeStamp = Instant.now().toEpochMilli();;
+        generator.generateAll(batchTimeStamp).forEach(carPosition -> {
+            log.info("Sending VIN: {} timestamp: {}", carPosition.getVin(), carPosition.getTimestamp());
             kafkaTemplate.send(positionsTopic, carPosition.getVin(), carPosition.toByteArray());
-            log.info("Sent CarPosition for VIN: {}", carPosition.getVin());
+
         });
     }
 }

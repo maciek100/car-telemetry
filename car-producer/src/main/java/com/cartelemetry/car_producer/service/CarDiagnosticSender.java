@@ -22,7 +22,7 @@ public class CarDiagnosticSender {
         this.generator = generator;
     }
 
-    @Scheduled(fixedRate = 20000)
+    @Scheduled(fixedDelay = 20000)
     public void send() {
         CarDiagnostics carDiag = generator.generateDiagnostics();
 

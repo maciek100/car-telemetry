@@ -42,7 +42,7 @@ class CarPositionSenderTest {
         CarPosition cp3 = moveCar(cp2);
         CarPosition cp4 = moveCar(cp3);
         var movement = List.of(cp1, cp2, cp3, cp4);
-        when(generator.generateAll()).thenReturn(movement);
+        when(generator.generateAll(10000)).thenReturn(movement);
         // WHEN
         sender.send();
         // THEN
