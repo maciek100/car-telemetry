@@ -82,7 +82,7 @@ public class CarPositionGenerator {
             log.info("Vehicle {} stopping until {}", vin, stopUntil);
             return null;
         }
-        log.info("Vehicle ABC {}", vehicleLocation);
+        log.info("Vehicle {} is at {}", vin, vehicleLocation);
         if (vehicleLocation.stopped)
             log.info("Vehicle {} STOPPED until {}", vin, vehicleLocation.stopUntil);
 

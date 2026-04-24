@@ -1,0 +1,83 @@
+# Car Telemetry System — Flink Implementation
+
+## Overview
+Evolution of the Kafka multi-topic implementation, replacing scheduled batch
+analytics with Apache Flink real-time stream processing.
+
+## Architecture
+[Car Producer] → Kafka (car-positions) → Flink Job → MongoDB
+
+## Tech Stack
+- **Java 21** + **Apache Flink 2.0.1**
+- **Kafka** — message transport (KRaft mode, no Zookeeper)
+- **Protobuf** — message serialization
+- **MongoDB** — storage for raw data and Flink results
+- **Docker** — fully containerized deployment
+
+## Key Differences from kafka-multi-topic Branch
+| | kafka-multi-topic | flink |
+|---|---|---|
+| Analytics | Batch every 10 minutes | Real-time per event |
+| State storage | MongoDB | Flink ValueState (memory) |
+| Trip detection | Scheduled polling | Event-driven timers |
+| Latency | Up to 10 minutes | Milliseconds |
+| MongoDB reads | Constant polling | Write only |
+
+## Flink Job — `CarPositionProcessFunction`
+**Stateful per-VIN processing:**
+- Maintains trip state in Flink `ValueState`
+- Detects new trips when state is empty
+- Computes haversine distance between consecutive positions
+- Detects speed alerts (> 120 kph)
+- Uses processing time timers for trip timeout (5 minutes)
+
+**MongoDB output collections:**
+- `flink_completed_trips` — completed trip summaries
+- `flink_speed_alerts` — speed violations
+
+## Running the System
+```bash
+# build all JARs
+cd car-consumer && mvn clean package -DskipTests
+cd ../car-producer && mvn clean package -DskipTests
+cd ../car-flink && mvn clean package -DskipTests
+cd ..
+
+# start infrastructure
+docker-compose up --build mongodb kafka car-producer jobmanager taskmanager
+
+# submit Flink job
+docker cp car-flink/target/car-flink-0.0.1-SNAPSHOT.jar jobmanager:/opt/flink/
+docker exec jobmanager flink run /opt/flink/car-flink-0.0.1-SNAPSHOT.jar
+```
+
+## Flink UI
+http://localhost:8082
+
+## MongoDB Collections
+| Collection | Description |
+|---|---|
+| `car_positions` | Raw GPS positions (written by car-consumer) |
+| `car_diagnostics` | Raw diagnostics (written by car-consumer) |
+| `flink_completed_trips` | Completed trips (written by Flink) |
+| `flink_speed_alerts` | Speed alerts (written by Flink) |
+
+## Environment Variables
+| Variable | Default | Description |
+|---|---|---|
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:29092` | Kafka address |
+| `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB address |
+| `GENERATOR_VEHICLE_COUNT` | `4` | Number of simulated vehicles |
+
+## Why Flink over Scheduled Analytics?
+- **No database polling** — state lives in Flink memory
+- **True real-time** — trips detected as events arrive
+- **Scalable** — add TaskManagers for more throughput
+- **Fault tolerant** — Flink checkpointing for state recovery
+- **Event-driven timers** — trip timeout handled by Flink, not cron
+
+## Next Steps
+- Add `CarDiagnosticsProcessFunction` for diagnostics stream
+- Implement Flink checkpointing for fault tolerance
+- Join position and diagnostics streams
+- Add Flink metrics to Grafana dashboard

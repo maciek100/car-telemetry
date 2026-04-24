@@ -23,7 +23,6 @@ public class CarPositionSender {
 
     @Scheduled(fixedDelay = 1000)
     public void send() {
-        log.info("AABBCCD send() called at: {}", System.currentTimeMillis());
         long batchTimeStamp = Instant.now().toEpochMilli();;
         generator.generateAll(batchTimeStamp).forEach(carPosition -> {
             log.info("Sending VIN: {} timestamp: {}", carPosition.getVin(), carPosition.getTimestamp());

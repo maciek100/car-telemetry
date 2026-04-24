@@ -102,8 +102,6 @@ public class CarPositionProcessFunction
         String vin = position.getVin();
 
         if (timestamp < flinkStartTime) {
-            out.collect("ARRIVED TOO EARLY: " + vin +
-                            " taken : " + (timestamp - flinkStartTime));
             return;
         }
 
@@ -149,38 +147,29 @@ public class CarPositionProcessFunction
             double speedKph = computeSpeedKph(distance, lastTimestamp, timestamp);
 
             if (speedKph > SPEED_ANOMALY_KPH) {
+                //silently ignore anomalies
+                return;
+            }
+            // update state
+            double newDistance = totalDistanceState.value() + distance;
+            totalDistanceState.update(newDistance);
+            totalReadingsState.update(totalReadingsState.value() + 1);
 
+            if (speedKph > maxSpeedState.value()) {
+                maxSpeedState.update(speedKph);
+            }
 
-                out.collect("ANOMALY DEBUG VIN: " + vin +
-                        " speed: " + String.format("%.2f", speedKph) +
-                        " distance: " + String.format("%.2f", distance) + "m" +
-                        " timeDelta: " + (timestamp - lastTimestamp) + "ms" +
-                        " fromLat: " + fromLat + " fromLon: " + fromLon +
-                        " toLat: " + toLat + " toLon: " + toLon);
-                //out.collect("GPS anomaly for VIN: " + vin +
-                //        " speed: " + String.format("%.2f", speedKph) + "kph");
-            } else {
-                // update state
-                double newDistance = totalDistanceState.value() + distance;
-                totalDistanceState.update(newDistance);
-                totalReadingsState.update(totalReadingsState.value() + 1);
+            if (speedKph > SPEED_LIMIT_KPH) {
+                Document speedAlert = new Document()
+                        .append("vin", vin)
+                        .append("timestamp", timestamp)
+                        .append("computedSpeedKph", speedKph)
+                        .append("latitude", position.getLocation().getLatitude())
+                        .append("longitude", position.getLocation().getLongitude());
 
-                if (speedKph > maxSpeedState.value()) {
-                    maxSpeedState.update(speedKph);
-                }
-
-                if (speedKph > SPEED_LIMIT_KPH) {
-                    Document speedAlert = new Document()
-                            .append("vin", vin)
-                            .append("timestamp", timestamp)
-                            .append("computedSpeedKph", speedKph)
-                            .append("latitude", position.getLocation().getLatitude())
-                            .append("longitude", position.getLocation().getLongitude());
-
-                    speedAlertsCollection.insertOne(speedAlert);
-                    out.collect("SPEED ALERT VIN: " + vin +
-                            " speed: " + String.format("%.2f", speedKph) + "kph");
-                }
+                speedAlertsCollection.insertOne(speedAlert);
+                out.collect("SPEED ALERT VIN: " + vin +
+                        " speed: " + String.format("%.2f", speedKph) + "kph");
             }
         }
 
@@ -199,10 +188,10 @@ public class CarPositionProcessFunction
         final double R = 6371000;
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                 Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                        Math.sin(dLon/2) * Math.sin(dLon/2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     double computeSpeedKph(double distanceMeters, long fromTs, long toTs) {
