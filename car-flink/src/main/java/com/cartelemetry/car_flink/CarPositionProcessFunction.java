@@ -1,5 +1,9 @@
 package com.cartelemetry.car_flink;
 
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
 import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
@@ -8,6 +12,7 @@ import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
 import com.cartelemetry.proto.CarPosition;
+import org.bson.Document;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,9 +34,21 @@ public class CarPositionProcessFunction
 
     private MapState<Long, Boolean> seenTimeStamps;
 
+    private transient MongoClient mongoClient;
+    private transient MongoCollection<Document> completedTripsCollection;
+    private transient MongoCollection<Document> speedAlertsCollection;
+
     @Override
     public void open(OpenContext openContext) throws Exception {
         flinkStartTime = System.currentTimeMillis() + 15000;
+
+        String mongoUri = System.getenv().getOrDefault(
+                "MONGODB_URI", "mongodb://localhost:27017");
+        mongoClient = MongoClients.create(mongoUri);
+        MongoDatabase db = mongoClient.getDatabase("cartelemetry");
+        completedTripsCollection = db.getCollection("flink_completed_trips");
+        speedAlertsCollection = db.getCollection("flink_speed_alerts");
+
         seenTimeStamps = getRuntimeContext().getMapState(
                 new MapStateDescriptor<>("seenTimeStamps", Long.class, Boolean.class));
         lastLatState = getRuntimeContext().getState(
@@ -132,6 +149,8 @@ public class CarPositionProcessFunction
             double speedKph = computeSpeedKph(distance, lastTimestamp, timestamp);
 
             if (speedKph > SPEED_ANOMALY_KPH) {
+
+
                 out.collect("ANOMALY DEBUG VIN: " + vin +
                         " speed: " + String.format("%.2f", speedKph) +
                         " distance: " + String.format("%.2f", distance) + "m" +
@@ -151,6 +170,14 @@ public class CarPositionProcessFunction
                 }
 
                 if (speedKph > SPEED_LIMIT_KPH) {
+                    Document speedAlert = new Document()
+                            .append("vin", vin)
+                            .append("timestamp", timestamp)
+                            .append("computedSpeedKph", speedKph)
+                            .append("latitude", position.getLocation().getLatitude())
+                            .append("longitude", position.getLocation().getLongitude());
+
+                    speedAlertsCollection.insertOne(speedAlert);
                     out.collect("SPEED ALERT VIN: " + vin +
                             " speed: " + String.format("%.2f", speedKph) + "kph");
                 }
@@ -199,14 +226,29 @@ public class CarPositionProcessFunction
         Double startLon = startLonState.value();
         Double lastLat = lastLatState.value();
         Double lastLon = lastLonState.value();
+        Double durationSeconds = (lastTimestamp - tripStart) / 1000.0;
+        Double avgSpeedKph = durationSeconds > 0 ?
+                (totalDistance / durationSeconds) * 3.6
+                : 0.0;
 
         if (tripStart != null) {
+            Document trip = new Document()
+                    .append("vin", vin)
+                    .append("tripStartTimestamp", tripStart)
+                    .append("lastUpdateTimestamp", lastTimestamp)
+                    .append("totalDistanceMeters", totalDistanceState.value())
+                    .append("maxSpeedKph", maxSpeedState.value())
+                    .append("totalReadings", totalReadingsState.value())
+                    .append("startLat", startLatState.value())
+                    .append("startLon", startLonState.value())
+                    .append("lastLat", lastLatState.value())
+                    .append("lastLon", lastLonState.value())
+                    .append("averageSpeedKph", avgSpeedKph);
+
+            completedTripsCollection.insertOne(trip);
+
             out.collect(String.format(
-                    "Trip COMPLETED for VIN: %s | " +
-                            "duration: %s | " +
-                            "distance: %.2fm | " +
-                            "maxSpeed: %.2fkph | " +
-                            "readings: %d",
+                    "Trip COMPLETED for VIN: %s | duration: %s | distance: %.2fm | maxSpeed: %.2fkph | readings: %d",
                     vin,
                     formatDuration(lastTimestamp - tripStart),
                     totalDistance,

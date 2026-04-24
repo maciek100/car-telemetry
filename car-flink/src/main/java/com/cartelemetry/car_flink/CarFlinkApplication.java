@@ -13,8 +13,10 @@ public class CarFlinkApplication {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		// Flink job will be built here
+		String kafkaBootstrap = System.getenv().getOrDefault(
+				"KAFKA_BOOTSTRAP_SERVERS", "localhost:29092");
 		KafkaSource<byte[]> source = KafkaSource.<byte[]>builder()
-				.setBootstrapServers("localhost:29092")
+				.setBootstrapServers(kafkaBootstrap)
 				.setTopics("car-positions")
 				.setGroupId("car-flink-group-" + System.currentTimeMillis())
 				.setStartingOffsets(OffsetsInitializer.latest())
