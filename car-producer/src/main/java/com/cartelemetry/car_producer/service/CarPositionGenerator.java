@@ -85,7 +85,8 @@ public class CarPositionGenerator {
         log.info("Vehicle {} is at {}", vin, vehicleLocation);
 
         double delta = random.nextInt(100) < 5 ? 0.00040 : 0.00015;
-        double newHeading = vehicleLocation.heading() + (random.nextDouble() - 0.5) * 20;
+        double newHeading = (vehicleLocation.heading() + (random.nextDouble() - 0.5) * 20) % 360;
+        if (newHeading < 0) newHeading += 360;
         double newLat = vehicleLocation.latitude() + Math.cos(Math.toRadians(newHeading)) * delta;
         double newLog = vehicleLocation.longitude() + Math.sin(Math.toRadians(newHeading)) * delta;
         vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading));
