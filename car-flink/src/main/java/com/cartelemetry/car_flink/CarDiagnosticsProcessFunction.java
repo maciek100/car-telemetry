@@ -41,9 +41,7 @@ public class CarDiagnosticsProcessFunction
     @Override
     public void processElement(byte[] value, Context ctx,
                                Collector<String> out) throws Exception {
-        log.info("!!! DIAGNOSTICS RECEIVED !!!");
         CarDiagnostics diag = CarDiagnostics.parseFrom(value);
-        log.info("VIN: {}", diag.getVin());
         if (diag.getEngineTemp() > 210) {
             saveAlert(diag, "HIGH_ENGINE_TEMP",
                     "Engine temp: " + diag.getEngineTemp());

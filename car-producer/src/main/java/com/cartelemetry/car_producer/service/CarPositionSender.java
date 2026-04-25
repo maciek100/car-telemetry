@@ -24,10 +24,7 @@ public class CarPositionSender {
     @Scheduled(fixedDelay = 1000)
     public void send() {
         long batchTimeStamp = Instant.now().toEpochMilli();;
-        generator.generateAll(batchTimeStamp).forEach(carPosition -> {
-            log.info("Sending VIN: {} timestamp: {}", carPosition.getVin(), carPosition.getTimestamp());
-            kafkaTemplate.send(positionsTopic, carPosition.getVin(), carPosition.toByteArray());
-
-        });
+        generator.generateAll(batchTimeStamp).forEach(carPosition ->
+            kafkaTemplate.send(positionsTopic, carPosition.getVin(), carPosition.toByteArray()));
     }
 }
