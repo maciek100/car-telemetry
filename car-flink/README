@@ -31,6 +31,18 @@ analytics with Apache Flink real-time stream processing.
 - Detects speed alerts (> 120 kph)
 - Uses processing time timers for trip timeout (5 minutes)
 
+## Flink Job - `CarDiagnosticsProcessFunction`
+**Stateful per-incident processing:**
+- Detects error messages sent by a vehicle
+- Each error message can contain multiple "problems" — generates one MongoDB document per problem
+- OBD2 error codes are classified by severity:
+  - `CRITICAL` — chassis/brakes (C0xxx)
+  - `HIGH` — body/powertrain (B0xxx, P0xxx)
+  - `MEDIUM` — manufacturer/network (P1xxx, P2xxx, U0xxx)
+- Each alert document is placed into `flink_diagnostics_alerts` collection
+- Counts warnings received per vehicle — if threshold reached (5 alerts)
+  pushes a notification to `flink_critical_warnings` collection
+
 **MongoDB output collections:**
 - `flink_completed_trips` — completed trip summaries
 - `flink_speed_alerts` — speed violations

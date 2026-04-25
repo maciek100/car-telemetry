@@ -6,7 +6,6 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import org.apache.flink.api.common.functions.OpenContext;
-import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
@@ -50,9 +49,9 @@ public class CarDiagnosticsProcessFunction
             saveAlert(diag, "LOW_FUEL",
                     "Fuel level: " + diag.getFuelLevel());
         }
-        if (!diag.getObd2ErrorCodesList().isEmpty()) {
-            saveAlert(diag, "OBD2_ERROR",
-                    "Codes: " + diag.getObd2ErrorCodesList());
+        for (String code : diag.getObd2ErrorCodesList()) {
+            Obd2Classifier.Severity severity = Obd2Classifier.classify(code);
+            saveAlert(diag, "OBD2_" + severity.name(), "Code: " + code + " Severity: " + severity);
         }
     }
 
@@ -63,8 +62,7 @@ public class CarDiagnosticsProcessFunction
                 .append("alertType", alertType)
                 .append("message", message)
                 .append("engineTemp", diag.getEngineTemp())
-                .append("fuelLevel", diag.getFuelLevel())
-                .append("obd2ErrorCodes", diag.getObd2ErrorCodesList());
+                .append("fuelLevel", diag.getFuelLevel());
         diagnosticsAlertsCollection.insertOne(alert);
         //increment alert count for VIN
         Integer count = alertCounterState.value();
