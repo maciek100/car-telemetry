@@ -1,11 +1,14 @@
 package com.cartelemetry.car_flink;
 
 import com.cartelemetry.proto.CarDiagnostics;
+import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
 import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
 import org.bson.Document;
@@ -13,40 +16,27 @@ import org.bson.Document;
 public class CarDiagnosticsProcessFunction
         extends KeyedProcessFunction<String, byte[], String> {
 
-    // state per VIN
-    private ValueState<Double> lastLatState;
-    private ValueState<Double> lastLonState;
-    private ValueState<Long> lastTimestampState;
-    private ValueState<Double> totalDistanceState;
-    private ValueState<Integer> totalReadingsState;
-    private ValueState<Long> tripStartTimestampState;
-    private ValueState<Double> startLatState;
-    private ValueState<Double> startLonState;
-    private ValueState<Double> maxSpeedState;
-    private ValueState<Long> timerState;  // tracks current timer
-
-    private MapState<Long, Boolean> seenTimeStamps;
-
-    //private transient MongoClient mongoClient;
     private transient MongoCollection<Document> diagnosticsAlertsCollection;
+    private transient MongoCollection<Document> criticalWarningCollection;
+
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(CarDiagnosticsProcessFunction.class);
+
+    private ValueState<Integer> alertCounterState;
+    private final int alertThreshold = 5;
+
     @Override
     public void open(OpenContext openContext) throws Exception {
         String mongoUri = System.getenv().getOrDefault(
                 "MONGODB_URI", "mongodb://localhost:27017");
-        //MongoClient mongoClient = MongoClients.create(mongoUri);
-        //MongoDatabase db = mongoClient.getDatabase("cartelemetry");
-        diagnosticsAlertsCollection = MongoClients.create(mongoUri)
-                .getDatabase("cartelemetry")
-                .getCollection("flink_diagnostics_alerts");
+
+        MongoClient mongoClient = MongoClients.create(mongoUri);
+        MongoDatabase mongoDb = mongoClient.getDatabase("cartelemetry");
+        diagnosticsAlertsCollection = mongoDb.getCollection("flink_diagnostics_alerts");
+        criticalWarningCollection = mongoDb.getCollection("flink_critical_warnings");
+        alertCounterState = getRuntimeContext().getState(
+                new ValueStateDescriptor<>("alertCount", Integer.class));
     }
-
-    ///private static final long TRIP_TIMEOUT_MS = 60 * 1000;  // 5 minutes
-    ///private static final double SPEED_LIMIT_KPH = 120.0;
-    ///private static final double SPEED_ANOMALY_KPH = 300.0;
-    ///private long flinkStartTime;
-
 
     @Override
     public void processElement(byte[] value, Context ctx,
@@ -68,7 +58,7 @@ public class CarDiagnosticsProcessFunction
         }
     }
 
-    private void saveAlert(CarDiagnostics diag, String alertType, String message) {
+    private void saveAlert(CarDiagnostics diag, String alertType, String message) throws Exception {
         Document alert = new Document()
                 .append("vin", diag.getVin())
                 .append("timestamp", diag.getTimestamp())
@@ -78,6 +68,23 @@ public class CarDiagnosticsProcessFunction
                 .append("fuelLevel", diag.getFuelLevel())
                 .append("obd2ErrorCodes", diag.getObd2ErrorCodesList());
         diagnosticsAlertsCollection.insertOne(alert);
+        //increment alert count for VIN
+        Integer count = alertCounterState.value();
+        count = (count == null) ? 1 : count + 1;
+        alertCounterState.update(count);
+
+        //check if threshold reached ...
+        if (count > alertThreshold) {
+            Document warning = new Document()
+                    .append("vin", diag.getVin())
+                    .append("timestamp", diag.getTimestamp())
+                    .append("alertCount", count)
+                    .append("message", "Vehicle" + diag.getVin() + " has triggered " + count + " alerts!");
+            criticalWarningCollection.insertOne(warning);
+            log.info("CRITICAL WARNING for VIN: " + diag.getVin() + " alerts: " + count);
+            alertCounterState.update(0);
+        }
+
     }
 
     @Override
