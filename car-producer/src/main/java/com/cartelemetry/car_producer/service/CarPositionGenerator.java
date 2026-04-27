@@ -85,7 +85,8 @@ public class CarPositionGenerator {
         log.info("Vehicle ABC {}", vehicleLocation);
         if (vehicleLocation.stopped)
             log.info("Vehicle {} STOPPED until {}", vin, vehicleLocation.stopUntil);
-        double newHeading = vehicleLocation.heading() + (random.nextDouble() - 0.5) * 20;
+        double newHeading = (vehicleLocation.heading() + (random.nextDouble() - 0.5) * 20) % 360;
+        if (newHeading < 0) newHeading += 360;
         double newLat = vehicleLocation.latitude() + Math.cos(Math.toRadians(newHeading)) * 0.00015;
         double newLog = vehicleLocation.longitude() + Math.sin(Math.toRadians(newHeading)) * 0.00015;
         vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading));
