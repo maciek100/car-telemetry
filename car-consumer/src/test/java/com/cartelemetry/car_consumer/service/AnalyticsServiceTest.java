@@ -1,42 +1,24 @@
 package com.cartelemetry.car_consumer.service;
 
-import com.cartelemetry.car_consumer.model.CarPositionDocument;
-import com.cartelemetry.car_consumer.model.CompletedTripDocument;
-import com.cartelemetry.car_consumer.model.CurrentTripDocument;
-import com.cartelemetry.car_consumer.model.SpeedAlertDocument;
 import com.cartelemetry.car_consumer.repository.CarPositionRepository;
-import com.cartelemetry.car_consumer.repository.CompletedTripRepository;
-import com.cartelemetry.car_consumer.repository.CurrentTripRepository;
-import com.cartelemetry.car_consumer.repository.SpeedAlertRepository;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.List;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 public class AnalyticsServiceTest {
     @Mock
     private CarPositionRepository carPositionRepository;
-    @Mock
-    private CurrentTripRepository currentTripRepository;
-    @Mock
-    private CompletedTripRepository completedTripRepository;
-    @Mock
-    private SpeedAlertRepository speedAlertRepository;
+    //@Mock
+    //private CurrentTripRepository currentTripRepository;
+    //@Mock
+    //private CompletedTripRepository completedTripRepository;
+    //@Mock
+    //private SpeedAlertRepository speedAlertRepository;
 
-    @InjectMocks
-    private AnalyticsService analyticsService;
-
+    //@InjectMocks
+    //private AnalyticsService analyticsService;
+/**
     @Test
     void haversineDistanceBetweenTwoKnownPoints() {
         // Austin to Dallas is ~300km
@@ -100,13 +82,14 @@ public class AnalyticsServiceTest {
         double speed0km = analyticsService.computeSpeedKph(1220.0, start, start);
         assertEquals(0, speed0km);
     }
+    **/
     /*
      * New trip created for new VIN
      * Trip updates correctly with new positions
      * Speed alert created when threshold exceeded
      * Trip completes after timeout
      */
-
+    /***
     @Test
     void newTripCreatedForNewVIN () {
         String vin = "1HGBH41JXMN109186";
@@ -410,4 +393,5 @@ public class AnalyticsServiceTest {
         System.out.println(AnalyticsService.prettyDuration.apply(timeNow - timeThen));
         System.out.println(AnalyticsService.prettyTime.apply(timeNow));
     }
+    */
 }

@@ -1,75 +1,85 @@
 package com.cartelemetry.car_consumer.controller;
 
 import com.cartelemetry.car_consumer.dto.ErrorResponse;
+import com.cartelemetry.car_consumer.dto.FlinkCompletedTripDto;
+import com.cartelemetry.car_consumer.dto.FlinkSpeedAlertDto;
 import com.cartelemetry.car_consumer.model.CarPositionDocument;
-import com.cartelemetry.car_consumer.model.CompletedTripDocument;
-import com.cartelemetry.car_consumer.model.CurrentTripDocument;
-import com.cartelemetry.car_consumer.model.SpeedAlertDocument;
 import com.cartelemetry.car_consumer.repository.CarPositionRepository;
-import com.cartelemetry.car_consumer.repository.CompletedTripRepository;
-import com.cartelemetry.car_consumer.repository.CurrentTripRepository;
-import com.cartelemetry.car_consumer.repository.SpeedAlertRepository;
+import com.mongodb.client.FindIterable;
 import lombok.RequiredArgsConstructor;
+import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
 import org.springframework.web.bind.annotation.*;
 
-import javax.print.attribute.standard.PageRanges;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/vehicles")
 @RequiredArgsConstructor
 public class VehicleController {
+
     private final CarPositionRepository carPositionRepository;
-    private final CompletedTripRepository completedTripRepository;
-    private final CurrentTripRepository currentTripRepository;
-    private final SpeedAlertRepository speedAlertRepository;
     private final MongoTemplate mongoTemplate;
 
-    // inject repositories you need
-
-    // GET /vehicles
-    @GetMapping()
-    public List<String> getVehicles () {
+    @GetMapping
+    public List<String> getVehicles() {
         return mongoTemplate.findDistinct("vin", CarPositionDocument.class, String.class);
     }
 
-    // GET /vehicles/{vin}/trip/current
     @GetMapping("/{vin}/trip/current")
     public ResponseEntity<?> getCurrentTrip(@PathVariable String vin) {
-        Optional<CurrentTripDocument> trip = currentTripRepository.findByVin(vin);
-        if (trip.isPresent())
-            return ResponseEntity.ok(trip.get());
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ErrorResponse(
-                        "Vehicle not found :" + vin,
-                        404,
+                        "Current trip state is managed by Flink in real-time",
+                        503,
                         System.currentTimeMillis()));
     }
 
-    // GET /vehicles/{vin}/trips
     @GetMapping("/{vin}/trips")
-    public List<CompletedTripDocument> getVehicleTrips (@PathVariable String vin) {
-        return completedTripRepository.findByVinOrderByTripStartTimestampDesc(vin);
+    public List<FlinkCompletedTripDto> getCompletedTrips(@PathVariable String vin) {
+        // query flink_completed_trips
+        return mongoTemplate.getCollection("flink_completed_trips")
+                .find(new Document("vin", vin))
+                .map(doc -> new FlinkCompletedTripDto(
+                        doc.getString("vin"),
+                        doc.getLong("timestamp"),
+                        doc.getLong("lastUpdateTimestamp"),
+                        doc.getDouble("totalDistanceMeters"),
+                        doc.getDouble("maxSpeedKph"),
+                        doc.getDouble("averageSpeedKph"),
+                        doc.getInteger("totalReadings"),
+                        doc.getDouble("startLat"),
+                        doc.getDouble("startLon"),
+                        doc.getDouble("lastLat"),
+                        doc.getDouble("lastLon")))
+                .into(new ArrayList<>());
     }
 
-    // GET /vehicles/{vin}/alerts
     @GetMapping("/{vin}/alerts")
-    public List<SpeedAlertDocument> getSpeedAlerts(@PathVariable String vin) {
-        return speedAlertRepository.findByVinOrderByTimestampDesc(vin);
+    public List<FlinkSpeedAlertDto> getAlerts(@PathVariable String vin) {
+        return mongoTemplate.getCollection("flink_speed_alerts")
+                .find(new Document("vin", vin))
+                .map(doc -> new FlinkSpeedAlertDto(
+                        doc.getString("vin"),
+                        doc.getLong("timestamp"),
+                        doc.getDouble("computedSpeedKph"),
+                        doc.getDouble("latitude"),
+                        doc.getDouble("longitude")))
+                .into(new ArrayList<>());
     }
 
-
-    // GET /vehicles/{vin}/positions
     @GetMapping("/{vin}/positions")
-    public List<CarPositionDocument> getVehiclePositions(
+    public List<CarPositionDocument> getPositions(
             @PathVariable String vin,
             @RequestParam(defaultValue = "100") int limit) {
         return carPositionRepository.findByVinOrderByTimestampDesc(
-                vin, PageRequest.of(0, limit));
+                vin, PageRequest.of(0, limit)
+        );
     }
 }
