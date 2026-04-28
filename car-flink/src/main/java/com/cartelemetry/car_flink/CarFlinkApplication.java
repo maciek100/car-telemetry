@@ -5,6 +5,7 @@ import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import com.cartelemetry.proto.CarPosition;
@@ -35,7 +36,7 @@ public class CarFlinkApplication {
 				.build();
 
 		//positions pipeline
-		env.fromSource(positionsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Positions")
+		DataStream<String> positionsOutput = env.fromSource(positionsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Positions")
 				.keyBy(bytes -> {
 					try {
 						return CarPosition.parseFrom(bytes).getVin();  // extract VIN for keying
@@ -43,11 +44,10 @@ public class CarFlinkApplication {
 						return "unknown";
 					}
 				})
-				.process(new CarPositionProcessFunction())  // deserialize inside processElement
-				.print();
+				.process(new CarPositionProcessFunction());  // deserialize inside processElement
 
 		//diagnostics pipeline
-		env.fromSource(diagnosticsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Diagnostics")
+		DataStream<String> diagnosticsOutput = env.fromSource(diagnosticsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Diagnostics")
 				.keyBy(bytes -> {
 					try {
 						return CarDiagnostics.parseFrom(bytes).getVin();  // extract VIN for keying
@@ -55,9 +55,18 @@ public class CarFlinkApplication {
 						return "unknown";
 					}
 				})
-				.process(new CarDiagnosticsProcessFunction())  // deserialize inside processElement
-				.print();
+				.process(new CarDiagnosticsProcessFunction());  // deserialize inside processElement
 
+		//BOTH streams also feed VehicleSnapshotProcessFunction
+		DataStream<TaggedEvent> unifiedStream =
+				env.fromSource(positionsSource, WatermarkStrategy.noWatermarks(), "Positions for Snapshot")
+						.map(bytes -> new TaggedEvent("POSITION", bytes))
+						.union(
+								env.fromSource(diagnosticsSource, WatermarkStrategy.noWatermarks(), "Diagnostics for Snapshot")
+										.map(bytes -> new TaggedEvent("DIAGNOSTICS", bytes)));
+		unifiedStream
+				.keyBy(TaggedEvent::getVin)
+				.process(new VehicleSnapshotProcessFunction());
 		env.execute("Car Telemetry Flink Job");
 	}
 }
