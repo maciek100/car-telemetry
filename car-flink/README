@@ -97,4 +97,4 @@ http://localhost:8082
 ## Checkpointing
 Implemented Flink checkpointing with exactly-once semantics and externalized
 checkpoint retention, ensuring fault-tolerant state recovery after job
- failures or cancellations
+ failures or cancellations ( EXACTLY_ONCE, RETAIN_ON_CANCELLATION, 30 second intervals)
