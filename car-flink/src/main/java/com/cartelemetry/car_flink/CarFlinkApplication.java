@@ -1,21 +1,29 @@
 package com.cartelemetry.car_flink;
 
 import com.cartelemetry.proto.CarDiagnostics;
+import com.cartelemetry.proto.CarPosition;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
-import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
+import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.kafka.common.serialization.ByteArrayDeserializer;
-import com.cartelemetry.proto.CarPosition;
 
 public class CarFlinkApplication {
 	public static void main(String[] args) throws Exception {
 		String timestamp = String.valueOf(System.currentTimeMillis());
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		// Flink job will be built here
+		// CHECKPOINTING CONFIGURATION
+		env.enableCheckpointing(30000); // checkpoint every 30 seconds
+		env.getCheckpointConfig().setCheckpointingConsistencyMode(
+				CheckpointingMode.EXACTLY_ONCE);
+		env.getCheckpointConfig().setMinPauseBetweenCheckpoints(5000);
+		env.getCheckpointConfig().setExternalizedCheckpointCleanup(
+				CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
+		env.getCheckpointConfig().setCheckpointTimeout(60000);
+
+		// FLINK JOBS ARE BUILT HERE
 		String kafkaBootstrap = System.getenv().getOrDefault(
 				"KAFKA_BOOTSTRAP_SERVERS", "localhost:29092");
 

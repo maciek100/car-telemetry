@@ -89,7 +89,12 @@ http://localhost:8082
 - **Event-driven timers** — trip timeout handled by Flink, not cron
 
 ## Next Steps
-- Add `CarDiagnosticsProcessFunction` for diagnostics stream
-- Implement Flink checkpointing for fault tolerance
-- Join position and diagnostics streams
+- Add `CarDiagnosticsProcessFunction` for diagnostics stream :: DONE
+- Implement Flink checkpointing for fault tolerance :: DONE
+- Join position and diagnostics streams :: DONE
 - Add Flink metrics to Grafana dashboard
+
+## Checkpointing
+Implemented Flink checkpointing with exactly-once semantics and externalized
+checkpoint retention, ensuring fault-tolerant state recovery after job
+ failures or cancellations

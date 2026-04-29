@@ -62,6 +62,8 @@ services:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MONGODB_URI: mongodb://mongodb:27017
 
@@ -75,6 +77,8 @@ services:
       FLINK_PROPERTIES: |
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 4
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MONGODB_URI: mongodb://mongodb:27017
 volumes:
