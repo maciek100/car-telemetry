@@ -38,6 +38,11 @@ public class CarPositionProcessFunction
     private transient MongoCollection<Document> completedTripsCollection;
     private transient MongoCollection<Document> speedAlertsCollection;
 
+    private static final long TRIP_TIMEOUT_MS = 60 * 1000;  // 5 minutes
+    private static final double SPEED_LIMIT_KPH = 120.0;
+    private static final double SPEED_ANOMALY_KPH = 300.0;
+    private long flinkStartTime;
+
     @Override
     public void open(OpenContext openContext) throws Exception {
         flinkStartTime = System.currentTimeMillis() + 15000;
@@ -73,17 +78,12 @@ public class CarPositionProcessFunction
                 new ValueStateDescriptor<>("timer", Long.class));
     }
 
-    private static final long TRIP_TIMEOUT_MS = 60 * 1000;  // 5 minutes
-    private static final double SPEED_LIMIT_KPH = 120.0;
-    private static final double SPEED_ANOMALY_KPH = 300.0;
-    private long flinkStartTime;
-
-
     @Override
     public void processElement(byte[] value, Context ctx,
                                Collector<String> out) throws Exception {
 
         CarPosition position = CarPosition.parseFrom(value);
+        //first make sure that the position is different from positions which arrived before ...
         long timestamp = position.getTimestamp();
         long cutoff = timestamp - 10000; // 10 seconds ago
         List<Long> toRemove = new ArrayList<>();
@@ -114,10 +114,7 @@ public class CarPositionProcessFunction
 
         // is this a new trip?
         Long lastTimestamp = lastTimestampState.value();
-        if (lastTimestamp == null) {
-            if (lastTimestamp != null && (timestamp - lastTimestamp) < 500) {
-                return;
-            }
+        if (lastTimestamp == null || (timestamp - lastTimestamp) > 500) {
             // NEW TRIP!
             tripStartTimestampState.update(timestamp);
             startLatState.update(position.getLocation().getLatitude());

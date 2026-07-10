@@ -8,6 +8,7 @@ import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsIni
 import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 
 public class CarFlinkApplication {
 	public static void main(String[] args) throws Exception {
@@ -19,14 +20,15 @@ public class CarFlinkApplication {
 		env.getCheckpointConfig().setCheckpointingConsistencyMode(
 				CheckpointingMode.EXACTLY_ONCE);
 		env.getCheckpointConfig().setMinPauseBetweenCheckpoints(5000);
-		env.getCheckpointConfig().setExternalizedCheckpointCleanup(
-				CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
+		//env.getCheckpointConfig().setExternalizedCheckpointCleanup(
+				//CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
 		env.getCheckpointConfig().setCheckpointTimeout(60000);
 
 		// FLINK JOBS ARE BUILT HERE
 		String kafkaBootstrap = System.getenv().getOrDefault(
 				"KAFKA_BOOTSTRAP_SERVERS", "localhost:29092");
 
+		//kafka source of vehicle positioning data
 		KafkaSource<byte[]> positionsSource = KafkaSource.<byte[]>builder()
 				.setBootstrapServers(kafkaBootstrap)
 				.setTopics("car-positions")
@@ -34,7 +36,18 @@ public class CarFlinkApplication {
 				.setStartingOffsets(OffsetsInitializer.latest())
 				.setValueOnlyDeserializer(new ByteArrayDeserializationSchema())
 				.build();
+		//positions pipeline
+		DataStream<String> positionsOutput = env.fromSource(positionsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Positions")
+				.keyBy(bytes -> {
+					try {
+						return CarPosition.parseFrom(bytes).getVin();  // extract VIN for keying
+					} catch (Exception e) {
+						return "unknown VIN";
+					}
+				})
+				.process(new CarPositionProcessFunction());  // deserialize inside processElement
 
+		//Kafka source of vehicle diagnostics data
 		KafkaSource<byte[]> diagnosticsSource = KafkaSource.<byte[]>builder()
 				.setBootstrapServers(kafkaBootstrap)
 				.setTopics("car-diagnostics")
@@ -43,29 +56,20 @@ public class CarFlinkApplication {
 				.setValueOnlyDeserializer(new ByteArrayDeserializationSchema())
 				.build();
 
-		//positions pipeline
-		DataStream<String> positionsOutput = env.fromSource(positionsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Positions")
-				.keyBy(bytes -> {
-					try {
-						return CarPosition.parseFrom(bytes).getVin();  // extract VIN for keying
-					} catch (Exception e) {
-						return "unknown";
-					}
-				})
-				.process(new CarPositionProcessFunction());  // deserialize inside processElement
-
 		//diagnostics pipeline
 		DataStream<String> diagnosticsOutput = env.fromSource(diagnosticsSource, WatermarkStrategy.noWatermarks(), "Kafka Car Diagnostics")
 				.keyBy(bytes -> {
 					try {
 						return CarDiagnostics.parseFrom(bytes).getVin();  // extract VIN for keying
 					} catch (Exception e) {
-						return "unknown";
+						return "unknown VIN";
 					}
 				})
 				.process(new CarDiagnosticsProcessFunction());  // deserialize inside processElement
 
-		//BOTH streams also feed VehicleSnapshotProcessFunction
+		// BOTH streams are also fed to VehicleSnapshotProcessFunction
+		// The main idea is to combine two idependent input streams of data into one "unified" stream which would feed the
+		// Flink process function with "snapshots" about the vehicles.
 		DataStream<TaggedEvent> unifiedStream =
 				env.fromSource(positionsSource, WatermarkStrategy.noWatermarks(), "Positions for Snapshot")
 						.map(bytes -> new TaggedEvent("POSITION", bytes))
@@ -75,6 +79,7 @@ public class CarFlinkApplication {
 		unifiedStream
 				.keyBy(TaggedEvent::getVin)
 				.process(new VehicleSnapshotProcessFunction());
+
 		env.execute("Car Telemetry Flink Job");
 	}
 }
