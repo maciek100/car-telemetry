@@ -26,16 +26,17 @@ public class CarPositionGenerator {
             double latitude,
             double longitude,
             double heading,
+            double currentSpeed,
             boolean stopped,
             Instant stopUntil) {
-        VehicleLocation withNewPosition(double newLat, double newLon, double newHeading) {
-            return new VehicleLocation(newLat, newLon, newHeading, false, null);
+        VehicleLocation withNewPosition(double newLat, double newLon, double newHeading, double newSpeed) {
+            return new VehicleLocation(newLat, newLon, newHeading, newSpeed, false, null);
         }
         VehicleLocation withStopped(Instant stopUntil) {
-            return new VehicleLocation(this.latitude, this.longitude, this.heading, true, stopUntil);
+            return new VehicleLocation(this.latitude, this.longitude, this.heading, this.currentSpeed, true, stopUntil);
         }
         VehicleLocation withMoving() {
-            return new VehicleLocation(this.latitude, this.longitude, this.heading, false, null);
+            return new VehicleLocation(this.latitude, this.longitude, this.heading, this.currentSpeed, false, null);
         }
     }
 
@@ -51,11 +52,12 @@ public class CarPositionGenerator {
         for (String vin : vinList) {
             boolean initialStop = random.nextBoolean();
             Instant stopUntil = initialStop ?
-                    Instant.now().plusSeconds(random.nextInt(180)) : null;
+                    Instant.now().plusSeconds(random.nextInt(20) + 10) : null;
             vehicleStates.put(vin, new VehicleLocation(
                     30.266 + random.nextDouble() * 0.1,
                     -97.730 + random.nextDouble() * 0.1,
                             random.nextDouble() * 360,
+                    (30 + random.nextDouble() * 50),
                     initialStop,
                     stopUntil));
         }
@@ -76,7 +78,7 @@ public class CarPositionGenerator {
                 return null;
             }
         }
-        if (random.nextInt(200) < 1) {
+        if (random.nextInt(500) < 1) {
             Instant stopUntil = Instant.now().plusSeconds(random.nextInt(300) + 300);
             vehicleStates.put(vin, vehicleLocation.withStopped(stopUntil));
             log.info("Vehicle {} stopping until {}", vin, stopUntil);
@@ -89,14 +91,15 @@ public class CarPositionGenerator {
         if (newHeading < 0) newHeading += 360;
         double newLat = vehicleLocation.latitude() + Math.cos(Math.toRadians(newHeading)) * delta;
         double newLog = vehicleLocation.longitude() + Math.sin(Math.toRadians(newHeading)) * delta;
-        vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading));
-        double speedMs = delta * 111111.0; // meters per second
-        double speedKph = speedMs * 3.6;   // convert to kph
-        speedKph = 177.7; //just a foul value ...
+        double newSpeed = computeNewSpeed(vehicleLocation.currentSpeed());
+        vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading, newSpeed));
+        //double speedMs = delta * 111111.0; // meters per second
+        //double speedKph = speedMs * 3.6;   // convert to kph
+        //speedKph = 177.7; //just a foul value ...
         return CarPosition.newBuilder()
                 .setVin(vin)
                 .setTimestamp(batchTimestamp)
-                .setSpeed(speedKph)
+                .setSpeed(newSpeed)
                 .setLocation(GpsLocation.newBuilder()
                         .setLatitude(newLat)
                         .setLongitude(newLog)
@@ -111,4 +114,29 @@ public class CarPositionGenerator {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
+
+    private double computeNewSpeed(double currentSpeed) {
+        double variation = (random.nextDouble() - 0.5) * 10;
+        double newSpeed = currentSpeed + variation;
+        return Math.max(20, Math.min(110, newSpeed));
+    }
+
+    /*
+
+    //FAST & FURIOUS variant for ... later.
+    private double computeNewSpeed(double currentSpeed) {
+    // Occasional speeder!
+    if (random.nextInt(100) < 5) {
+        return computeSpeedingSpeed();  // ← just add this
+    }
+
+    double variation = (random.nextDouble() - 0.5) * 10;
+    double newSpeed = currentSpeed + variation;
+    return Math.max(20, Math.min(110, newSpeed));
+}
+
+private double computeSpeedingSpeed() {
+    return 120 + random.nextDouble() * 40; // 120-160 kph
+}
+     */
 }

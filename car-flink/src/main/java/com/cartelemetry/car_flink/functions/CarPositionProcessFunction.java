@@ -1,5 +1,6 @@
 package com.cartelemetry.car_flink.functions;
 
+import com.cartelemetry.car_flink.util.GPSUtil;
 import com.cartelemetry.car_flink.util.MongoUtil;
 import com.cartelemetry.proto.CarPosition;
 import com.mongodb.client.MongoCollection;
@@ -134,9 +135,9 @@ public class CarPositionProcessFunction
 //                    " timeDelta: " + timeDelta + "ms" +
 //                    " fromLat: " + fromLat + " toLat: " + toLat +
 //                    " fromLon: " + fromLon + " toLon: " + toLon);
-            double distance = haversine(fromLat, fromLon, toLat, toLon);
+            double distance = GPSUtil.haversine(fromLat, fromLon, toLat, toLon);
             out.collect("For VIN time elapsed is " + (timestamp - lastTimestamp));
-            double speedKph = computeSpeedKph(distance, lastTimestamp, timestamp);
+            double speedKph = GPSUtil.computeSpeedKph(distance, lastTimestamp, timestamp);
 
             if (speedKph > SPEED_ANOMALY_KPH) {
                 //silently ignore anomalies
@@ -175,7 +176,7 @@ public class CarPositionProcessFunction
         ctx.timerService().registerProcessingTimeTimer(timerTime);
         timerState.update(timerTime);
     }
-
+/*
     private double haversine(double lat1, double lon1, double lat2, double lon2) {
         final double R = 6371000;
         double dLat = Math.toRadians(lat2 - lat1);
@@ -191,6 +192,7 @@ public class CarPositionProcessFunction
         if (seconds <= 0) return 0;
         return (distanceMeters / seconds) * 3.6;
     }
+    */
 
     @Override
     public void onTimer(long timestamp, OnTimerContext ctx,
@@ -231,7 +233,7 @@ public class CarPositionProcessFunction
             out.collect(String.format(
                     "Trip COMPLETED for VIN: %s | duration: %s | distance: %.2fm | maxSpeed: %.2fkph | readings: %d",
                     vin,
-                    formatDuration(lastTimestamp - tripStart),
+                    GPSUtil.formatDuration(lastTimestamp - tripStart),
                     totalDistance,
                     maxSpeed,
                     totalReadings
@@ -251,9 +253,9 @@ public class CarPositionProcessFunction
         timerState.clear();
     }
 
-    private String formatDuration(long millis) {
-        long minutes = millis / 60000;
-        long seconds = (millis % 60000) / 1000;
-        return String.format("%dm%02ds", minutes, seconds);
-    }
+//    private String formatDuration(long millis) {
+//        long minutes = millis / 60000;
+//        long seconds = (millis % 60000) / 1000;
+//        return String.format("%dm%02ds", minutes, seconds);
+//    }
 }
