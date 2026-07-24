@@ -1,4 +1,4 @@
-package com.cartelemetry.car_flink;
+package com.cartelemetry.car_flink.util;
 
 public class Obd2Classifier {
 

@@ -1,6 +1,9 @@
 package com.cartelemetry.car_flink;
 
-import com.cartelemetry.proto.CarDiagnostics;
+import com.cartelemetry.car_flink.functions.CarDiagnosticsProcessFunction;
+import com.cartelemetry.car_flink.functions.CarPositionProcessFunction;
+import com.cartelemetry.car_flink.functions.VehicleSnapshotProcessFunction;
+import com.cartelemetry.car_flink.util.TaggedEvent;import com.cartelemetry.proto.CarDiagnostics;
 import com.cartelemetry.proto.CarPosition;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -8,7 +11,6 @@ import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsIni
 import org.apache.flink.core.execution.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.environment.CheckpointConfig;
 
 public class CarFlinkApplication {
 	public static void main(String[] args) throws Exception {

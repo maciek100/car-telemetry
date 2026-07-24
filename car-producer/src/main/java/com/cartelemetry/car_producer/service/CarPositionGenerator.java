@@ -84,16 +84,19 @@ public class CarPositionGenerator {
         }
         log.info("Vehicle {} is at {}", vin, vehicleLocation);
 
-        double delta = random.nextInt(100) < 5 ? 0.00040 : 0.00015;
+        double delta = random.nextInt(100) < 5 ? 0.00020 : 0.00012;
         double newHeading = (vehicleLocation.heading() + (random.nextDouble() - 0.5) * 20) % 360;
         if (newHeading < 0) newHeading += 360;
         double newLat = vehicleLocation.latitude() + Math.cos(Math.toRadians(newHeading)) * delta;
         double newLog = vehicleLocation.longitude() + Math.sin(Math.toRadians(newHeading)) * delta;
         vehicleStates.put(vin, vehicleLocation.withNewPosition(newLat, newLog, newHeading));
+        double speedMs = delta * 111111.0; // meters per second
+        double speedKph = speedMs * 3.6;   // convert to kph
+        speedKph = 177.7; //just a foul value ...
         return CarPosition.newBuilder()
                 .setVin(vin)
                 .setTimestamp(batchTimestamp)
-                .setSpeed(random.nextDouble() * 120)
+                .setSpeed(speedKph)
                 .setLocation(GpsLocation.newBuilder()
                         .setLatitude(newLat)
                         .setLongitude(newLog)

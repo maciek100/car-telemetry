@@ -1,9 +1,8 @@
-package com.cartelemetry.car_flink;
+package com.cartelemetry.car_flink.functions;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
+import com.cartelemetry.car_flink.util.MongoUtil;
+import com.cartelemetry.proto.CarPosition;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
 import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
@@ -11,7 +10,6 @@ import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
-import com.cartelemetry.proto.CarPosition;
 import org.bson.Document;
 
 import java.util.ArrayList;
@@ -34,7 +32,7 @@ public class CarPositionProcessFunction
 
     private MapState<Long, Boolean> seenTimeStamps;
 
-    private transient MongoClient mongoClient;
+    //private transient MongoClient mongoClient;
     private transient MongoCollection<Document> completedTripsCollection;
     private transient MongoCollection<Document> speedAlertsCollection;
 
@@ -47,12 +45,8 @@ public class CarPositionProcessFunction
     public void open(OpenContext openContext) throws Exception {
         flinkStartTime = System.currentTimeMillis() + 15000;
 
-        String mongoUri = System.getenv().getOrDefault(
-                "MONGODB_URI", "mongodb://localhost:27017");
-        mongoClient = MongoClients.create(mongoUri);
-        MongoDatabase db = mongoClient.getDatabase("cartelemetry");
-        completedTripsCollection = db.getCollection("flink_completed_trips");
-        speedAlertsCollection = db.getCollection("flink_speed_alerts");
+        completedTripsCollection = MongoUtil.getCollection("flink_completed_trips");
+        speedAlertsCollection = MongoUtil.getCollection("flink_speed_alerts");
 
         seenTimeStamps = getRuntimeContext().getMapState(
                 new MapStateDescriptor<>("seenTimeStamps", Long.class, Boolean.class));
@@ -141,6 +135,7 @@ public class CarPositionProcessFunction
 //                    " fromLat: " + fromLat + " toLat: " + toLat +
 //                    " fromLon: " + fromLon + " toLon: " + toLon);
             double distance = haversine(fromLat, fromLon, toLat, toLon);
+            out.collect("For VIN time elapsed is " + (timestamp - lastTimestamp));
             double speedKph = computeSpeedKph(distance, lastTimestamp, timestamp);
 
             if (speedKph > SPEED_ANOMALY_KPH) {

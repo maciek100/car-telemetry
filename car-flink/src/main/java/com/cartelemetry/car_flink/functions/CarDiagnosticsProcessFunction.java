@@ -1,10 +1,9 @@
-package com.cartelemetry.car_flink;
+package com.cartelemetry.car_flink.functions;
 
+import com.cartelemetry.car_flink.util.MongoUtil;
+import com.cartelemetry.car_flink.util.Obd2Classifier;
 import com.cartelemetry.proto.CarDiagnostics;
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
 import org.apache.flink.api.common.functions.OpenContext;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
@@ -14,7 +13,6 @@ import org.bson.Document;
 
 public class CarDiagnosticsProcessFunction
         extends KeyedProcessFunction<String, byte[], String> {
-
     private transient MongoCollection<Document> diagnosticsAlertsCollection;
     private transient MongoCollection<Document> criticalWarningCollection;
 
@@ -26,13 +24,8 @@ public class CarDiagnosticsProcessFunction
 
     @Override
     public void open(OpenContext openContext) throws Exception {
-        String mongoUri = System.getenv().getOrDefault(
-                "MONGODB_URI", "mongodb://localhost:27017");
-
-        MongoClient mongoClient = MongoClients.create(mongoUri);
-        MongoDatabase mongoDb = mongoClient.getDatabase("cartelemetry");
-        diagnosticsAlertsCollection = mongoDb.getCollection("flink_diagnostics_alerts");
-        criticalWarningCollection = mongoDb.getCollection("flink_critical_warnings");
+        diagnosticsAlertsCollection = MongoUtil.getCollection("flink_diagnostics_alerts");
+        criticalWarningCollection = MongoUtil.getCollection("flink_critical_warnings");
         alertCounterState = getRuntimeContext().getState(
                 new ValueStateDescriptor<>("alertCount", Integer.class));
     }
@@ -42,20 +35,20 @@ public class CarDiagnosticsProcessFunction
                                Collector<String> out) throws Exception {
         CarDiagnostics diag = CarDiagnostics.parseFrom(value);
         if (diag.getEngineTemp() > 210) {
-            saveAlert(diag, "HIGH_ENGINE_TEMP",
+            recordAlert(diag, "HIGH_ENGINE_TEMP",
                     "Engine temp: " + diag.getEngineTemp());
         }
         if (diag.getFuelLevel() < 0.1) {
-            saveAlert(diag, "LOW_FUEL",
+            recordAlert(diag, "LOW_FUEL",
                     "Fuel level: " + diag.getFuelLevel());
         }
         for (String code : diag.getObd2ErrorCodesList()) {
             Obd2Classifier.Severity severity = Obd2Classifier.classify(code);
-            saveAlert(diag, "OBD2_" + severity.name(), "Code: " + code + " Severity: " + severity);
+            recordAlert(diag, "OBD2_" + severity.name(), "Code: " + code + " Severity: " + severity);
         }
     }
 
-    private void saveAlert(CarDiagnostics diag, String alertType, String message) throws Exception {
+    private void recordAlert(CarDiagnostics diag, String alertType, String message) throws Exception {
         Document alert = new Document()
                 .append("vin", diag.getVin())
                 .append("timestamp", diag.getTimestamp())
