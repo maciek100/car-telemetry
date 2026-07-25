@@ -13,8 +13,9 @@ import org.bson.Document;
 
 public class CarDiagnosticsProcessFunction
         extends KeyedProcessFunction<String, byte[], String> {
-    private transient MongoCollection<Document> diagnosticsAlertsCollection;
-    private transient MongoCollection<Document> criticalWarningCollection;
+
+    private /*transient*/ MongoCollection<Document> diagnosticsAlertsCollection;
+    private /*transient*/ MongoCollection<Document> criticalWarningCollection;
 
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(CarDiagnosticsProcessFunction.class);
@@ -22,10 +23,34 @@ public class CarDiagnosticsProcessFunction
     private ValueState<Integer> alertCounterState;
     private final int alertThreshold = 5;
 
+    private final String diagnosticsCollectionName;
+    private final String criticalWarningCollectionName;
+
+    //Production constructor
+    public CarDiagnosticsProcessFunction() {
+        this("flink_diagnostics_alerts","flink_critical_warnings");
+    }
+    //Test constructor -injectable collection names
+    CarDiagnosticsProcessFunction(String diagnosticsCollectionName, String criticalWarningCollectionName) {
+        this.diagnosticsCollectionName = diagnosticsCollectionName;
+        this.criticalWarningCollectionName = criticalWarningCollectionName;
+    }
+    //Test constructor - with actual collections ijested
+
+    public CarDiagnosticsProcessFunction(MongoCollection<Document> diagnosticsCollection,
+                                         MongoCollection<Document> criticalWarningsCollection) {
+        this.diagnosticsCollectionName = null;
+        this.criticalWarningCollectionName = null;
+        this.diagnosticsAlertsCollection = diagnosticsCollection;
+        this.criticalWarningCollection = criticalWarningsCollection;
+    }
+
     @Override
     public void open(OpenContext openContext) throws Exception {
-        diagnosticsAlertsCollection = MongoUtil.getCollection("flink_diagnostics_alerts");
-        criticalWarningCollection = MongoUtil.getCollection("flink_critical_warnings");
+        if (diagnosticsAlertsCollection == null) {
+            diagnosticsAlertsCollection = MongoUtil.getCollection(diagnosticsCollectionName);
+            criticalWarningCollection = MongoUtil.getCollection(criticalWarningCollectionName);
+        }
         alertCounterState = getRuntimeContext().getState(
                 new ValueStateDescriptor<>("alertCount", Integer.class));
     }
