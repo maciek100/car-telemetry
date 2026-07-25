@@ -40,6 +40,7 @@ public class CarPositionProcessFunction
     private static final long TRIP_TIMEOUT_MS = 60 * 1000;  // 5 minutes
     private static final double SPEED_LIMIT_KPH = 120.0;
     private static final double SPEED_ANOMALY_KPH = 300.0;
+    private static final long NEW_TRIP_THRESHOLD_MS = 3000;
     private long flinkStartTime;
 
     @Override
@@ -109,7 +110,7 @@ public class CarPositionProcessFunction
 
         // is this a new trip?
         Long lastTimestamp = lastTimestampState.value();
-        if (lastTimestamp == null || (timestamp - lastTimestamp) > 500) {
+        if (lastTimestamp == null || (timestamp - lastTimestamp) > NEW_TRIP_THRESHOLD_MS) {
             // NEW TRIP!
             tripStartTimestampState.update(timestamp);
             startLatState.update(position.getLocation().getLatitude());

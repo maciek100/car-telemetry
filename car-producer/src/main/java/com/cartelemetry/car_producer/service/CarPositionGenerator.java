@@ -19,6 +19,7 @@ public class CarPositionGenerator {
     private static final Random random = new Random();
     private final VehicleRegistry vehicleRegistry;
 
+
     public CarPositionGenerator(VehicleRegistry vehicleRegistry) {
         this.vehicleRegistry = vehicleRegistry;
     }
