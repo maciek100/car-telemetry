@@ -25,11 +25,18 @@ public class VehicleSnapshotProcessFunction extends KeyedProcessFunction<String,
     private ValueState<Long> lastPositionTimestampState;
 
     private transient MongoCollection<Document> snapshotsCollection;
+    public VehicleSnapshotProcessFunction() {}
+    // Test constructor:
+    VehicleSnapshotProcessFunction(
+            MongoCollection<Document> snapshotsCollection) {
+        this.snapshotsCollection = snapshotsCollection;
+    }
 
     @Override
     public void open(OpenContext openContext) throws Exception {
-
-        snapshotsCollection = MongoUtil.getCollection("flink_vehicle_snapshot");
+        if (snapshotsCollection == null) {
+            snapshotsCollection = MongoUtil.getCollection("flink_vehicle_snapshot");
+        }
         lastLatState = getRuntimeContext().getState(
                 new ValueStateDescriptor<>("snapLastLat", Double.class));
         lastLonState = getRuntimeContext().getState(
