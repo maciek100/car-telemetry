@@ -43,8 +43,31 @@ public class CarPositionProcessFunction
     private static final long NEW_TRIP_THRESHOLD_MS = 3000;
     private long flinkStartTime;
 
+    private final String completedTripsCollectionName;
+    private final String speedAlertsCollectionName;
+
+    public CarPositionProcessFunction() {
+        this("flink_completed_trips","flink_speed_alerts");
+    }
+
+    public CarPositionProcessFunction(String completedTripsCollectionName, String speedAlertsCollectionName) {
+        this.completedTripsCollectionName = completedTripsCollectionName;
+        this.speedAlertsCollectionName = speedAlertsCollectionName;
+    }
+
+   public CarPositionProcessFunction(MongoCollection<Document> completedTripsCollection, MongoCollection<Document> speedAlertsCollection) {
+       this.completedTripsCollectionName = null;
+       this.speedAlertsCollectionName = null;
+        this.completedTripsCollection = completedTripsCollection;
+        this.speedAlertsCollection = speedAlertsCollection;
+    }
+
     @Override
     public void open(OpenContext openContext) throws Exception {
+        if (completedTripsCollection == null) {
+            completedTripsCollection = MongoUtil.getCollection(completedTripsCollectionName);
+            speedAlertsCollection = MongoUtil.getCollection(speedAlertsCollectionName);
+        }
         flinkStartTime = System.currentTimeMillis() + 15000;
 
         completedTripsCollection = MongoUtil.getCollection("flink_completed_trips");
