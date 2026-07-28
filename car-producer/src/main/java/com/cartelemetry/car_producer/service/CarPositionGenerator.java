@@ -116,7 +116,8 @@ public class CarPositionGenerator {
                 .collect(Collectors.toList());
     }
 
-    private double computeNewSpeed(double currentSpeed) {
+    // package private ... for testing
+    double computeNewSpeed(double currentSpeed) {
         double variation = (random.nextDouble() - 0.5) * 10;
         double newSpeed = currentSpeed + variation;
         return Math.max(20, Math.min(110, newSpeed));
