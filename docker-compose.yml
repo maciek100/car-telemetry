@@ -64,6 +64,8 @@ services:
         taskmanager.numberOfTaskSlots: 4
         state.checkpoints.dir: file:///tmp/flink-checkpoints
         execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+        state.backend: rocksdb
+        state.backend.incremental: true
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MONGODB_URI: mongodb://mongodb:27017
 
@@ -79,6 +81,8 @@ services:
         taskmanager.numberOfTaskSlots: 4
         state.checkpoints.dir: file:///tmp/flink-checkpoints
         execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+        state.backend: rocksdb
+        state.backend.incremental: true
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MONGODB_URI: mongodb://mongodb:27017
 volumes:

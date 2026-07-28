@@ -3,7 +3,8 @@ package com.cartelemetry.car_flink;
 import com.cartelemetry.car_flink.functions.CarDiagnosticsProcessFunction;
 import com.cartelemetry.car_flink.functions.CarPositionProcessFunction;
 import com.cartelemetry.car_flink.functions.VehicleSnapshotProcessFunction;
-import com.cartelemetry.car_flink.util.TaggedEvent;import com.cartelemetry.proto.CarDiagnostics;
+import com.cartelemetry.car_flink.util.TaggedEvent;
+import com.cartelemetry.proto.CarDiagnostics;
 import com.cartelemetry.proto.CarPosition;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
@@ -22,10 +23,7 @@ public class CarFlinkApplication {
 		env.getCheckpointConfig().setCheckpointingConsistencyMode(
 				CheckpointingMode.EXACTLY_ONCE);
 		env.getCheckpointConfig().setMinPauseBetweenCheckpoints(5000);
-		//env.getCheckpointConfig().setExternalizedCheckpointCleanup(
-				//CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
 		env.getCheckpointConfig().setCheckpointTimeout(60000);
-
 		// FLINK JOBS ARE BUILT HERE
 		String kafkaBootstrap = System.getenv().getOrDefault(
 				"KAFKA_BOOTSTRAP_SERVERS", "localhost:29092");
