@@ -8,7 +8,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import com.cartelemetry.car_producer.service.CarPositionGenerator;
 
 class CarPositionGeneratorTest {
 

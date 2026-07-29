@@ -1,7 +1,6 @@
 package com.cartelemetry.car_producer.service;
 
 import com.cartelemetry.proto.CarDiagnostics;
-import com.google.protobuf.MapEntry;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
 
@@ -19,29 +18,44 @@ public class CarDiagnosticsGenerator {
         this.vehicleRegistry = vehicleRegistry;
     }
 
+    static double engineTempMax = 240.0;
+    static double engineTempMin = 180.0;
+    static double fuelLevelMax = 1.0;
+    static double fuelLevelMin = 0.0;
+    static double batteryVoltageMax = 14.4;
+    static double batteryVoltageMin = 12.0;
+    static double tirePressureMax = 31.0;
+    static double tirePressureMin = 26.0;
+    static double oilPressureMax = 65.0;
+    static double oilPressureMin = 25.0;
+    static int rpmMin = 700;
+    static int rpmMax = 4000;
+    static int odometerMin = 5000;
+
     @PostConstruct
     public void init () {
         vehicleRegistry.getVins()
                 .forEach(vin ->
-                        odometers.put(vin, 5000 + random.nextInt(100000)));
+                        odometers.put(vin, odometerMin + random.nextInt(100000)));
     }
 
     public CarDiagnostics generateDiagnostics() {
         String vin = vehicleRegistry.randomVin();
         int currentOdometer = odometers.get(vin) + random.nextInt(10) + 1;
         odometers.put(vin, currentOdometer);
+
          CarDiagnostics.Builder builder = CarDiagnostics.newBuilder()
                 .setVin(vin)
                 .setTimestamp(System.currentTimeMillis())
-                .setEngineTemp(180 + random.nextDouble() * 60)
+                .setEngineTemp(engineTempMin + random.nextDouble() * 60)
                 .setFuelLevel(random.nextDouble())
-                .setBatteryVoltage(12.0 + random.nextDouble() * 2.4)
-                .setOilPressure(25 * random.nextDouble() * 40) // 25 - 65 PSI
-                .setRpm(700 + random.nextInt(3300)) //700 - 4000
-                .setTirePressureFL(26.0 + random.nextDouble() * 5)
-                .setTirePressureRL(26.0 + random.nextDouble() * 5)
-                .setTirePressureFR(26.0 + random.nextDouble() * 5)
-                .setTirePressureRR(25.9 + random.nextDouble() * 5)
+                .setBatteryVoltage(batteryVoltageMin + random.nextDouble() * 2.4)
+                .setOilPressure(oilPressureMin + random.nextDouble() * 40) // 25 - 65 PSI
+                 .setRpm(rpmMin + random.nextInt(rpmMax - rpmMin)) //700 - 4000
+                .setTirePressureFL(tirePressureMin + random.nextDouble() * 5)
+                .setTirePressureRL(tirePressureMin + random.nextDouble() * 5)
+                .setTirePressureFR(tirePressureMin + random.nextDouble() * 5)
+                .setTirePressureRR(tirePressureMin + random.nextDouble() * 5)
                 .setOdometer(currentOdometer);
 
         if (random.nextInt(10) == 0) builder.addObd2ErrorCodes("P0420");
