@@ -46,6 +46,9 @@ public class CarPositionProcessFunction
     private final String completedTripsCollectionName;
     private final String speedAlertsCollectionName;
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(CarPositionProcessFunction.class);
+
     public CarPositionProcessFunction() {
         this("flink_completed_trips","flink_speed_alerts");
     }
@@ -69,9 +72,6 @@ public class CarPositionProcessFunction
             speedAlertsCollection = MongoUtil.getCollection(speedAlertsCollectionName);
         }
         flinkStartTime = System.currentTimeMillis() + 15000;
-
-        completedTripsCollection = MongoUtil.getCollection("flink_completed_trips");
-        speedAlertsCollection = MongoUtil.getCollection("flink_speed_alerts");
 
         seenTimeStamps = getRuntimeContext().getMapState(
                 new MapStateDescriptor<>("seenTimeStamps", Long.class, Boolean.class));
@@ -102,122 +102,156 @@ public class CarPositionProcessFunction
                                Collector<String> out) throws Exception {
 
         CarPosition position = CarPosition.parseFrom(value);
-        //first make sure that the position is different from positions which arrived before ...
         long timestamp = position.getTimestamp();
-        long cutoff = timestamp - 10000; // 10 seconds ago
+        String vin = position.getVin();
+        if (isDuplicate(timestamp)) return;
+        if (timestamp < flinkStartTime) return;
+
+        resetTimer(ctx);
+
+        Long lastTimestamp = lastTimestampState.value();
+        if (isNewTrip(lastTimestamp, timestamp)) {
+            // NEW TRIP!
+            startNewTrip(vin, position, timestamp, out);
+        } else {
+            // CONTINUING TRIP
+            continueTrip(vin, position, timestamp, lastTimestamp, out);
+        }
+        updatePosition(position, timestamp);
+        registerTimer(ctx);
+    }
+
+    /**
+     * Checks if this position message is a duplicate.
+     * Cleans up timestamps older than 10 seconds
+     * to prevent MapState from growing indefinitely.
+     */
+    private boolean isDuplicate(long timestamp) throws Exception {
+        // Clean old timestamps
+        long cutoff = timestamp - 10000;
         List<Long> toRemove = new ArrayList<>();
         for (Long ts : seenTimeStamps.keys()) {
-            if (ts < cutoff) {
-                toRemove.add(ts);
-            }
+            if (ts < cutoff) toRemove.add(ts);
         }
         for (Long ts : toRemove) {
             seenTimeStamps.remove(ts);
         }
-        if (seenTimeStamps.contains(position.getTimestamp())) {
-            return;
+
+        // Check duplicate
+        if (seenTimeStamps.contains(timestamp)) return true;
+        seenTimeStamps.put(timestamp, true);
+        return false;
+    }
+    /**
+     * Determines if gap between messages indicates
+     * a new trip has started.
+     * Gap > NEW_TRIP_THRESHOLD_MS = new trip.
+     */
+    private boolean isNewTrip(Long lastTimestamp, long timestamp) {
+        return lastTimestamp == null ||
+                (timestamp - lastTimestamp) > NEW_TRIP_THRESHOLD_MS;
+    }
+    /**
+     * Initializes state for a new trip.
+     * Called when first message arrives or after
+     * a gap indicating trip boundary.
+     */
+    private void startNewTrip(String vin, CarPosition position,
+                              long timestamp, Collector<String> out)
+            throws Exception {
+        tripStartTimestampState.update(timestamp);
+        startLatState.update(position.getLocation().getLatitude());
+        startLonState.update(position.getLocation().getLongitude());
+        totalDistanceState.update(0.0);
+        totalReadingsState.update(1);
+        maxSpeedState.update(0.0);
+        out.collect("New trip started for VIN: " + vin);
+    }
+    /**
+     * Processes continuing trip message.
+     * Computes distance and speed via Haversine.
+     * Filters speed anomalies (>300 kph = GPS glitch).
+     * Generates speed alert if over limit.
+     */
+    private void continueTrip(String vin, CarPosition position,
+                              long timestamp, long lastTimestamp,
+                              Collector<String> out) throws Exception {
+        double fromLat = lastLatState.value();
+        double fromLon = lastLonState.value();
+        double toLat = position.getLocation().getLatitude();
+        double toLon = position.getLocation().getLongitude();
+
+        double distance = GPSUtil.haversine(fromLat, fromLon, toLat, toLon);
+        double speedKph = GPSUtil.computeSpeedKph(distance, lastTimestamp, timestamp);
+
+        if (speedKph > SPEED_ANOMALY_KPH) return;
+
+        totalDistanceState.update(totalDistanceState.value() + distance);
+        totalReadingsState.update(totalReadingsState.value() + 1);
+
+        if (speedKph > maxSpeedState.value()) {
+            maxSpeedState.update(speedKph);
         }
-        seenTimeStamps.put(position.getTimestamp(), true);
-        String vin = position.getVin();
 
-        if (timestamp < flinkStartTime) {
-            return;
+        if (speedKph > SPEED_LIMIT_KPH) {
+            saveSpeedAlert(vin, position, timestamp, speedKph, out);
         }
-
-
-        // cancel existing timer
+    }
+    /**
+     * Updates last known position state.
+     * Called after both new trip and continuing trip processing.
+     */
+    private void updatePosition(CarPosition position, long timestamp)
+            throws Exception {
+        lastLatState.update(position.getLocation().getLatitude());
+        lastLonState.update(position.getLocation().getLongitude());
+        lastTimestampState.update(timestamp);
+    }
+    /**
+     * Cancels existing trip timeout timer.
+     * Called on every message to reset the timeout.
+     */
+    private void resetTimer(Context ctx) throws Exception {
         Long existingTimer = timerState.value();
         if (existingTimer != null) {
             ctx.timerService().deleteProcessingTimeTimer(existingTimer);
         }
-
-        // is this a new trip?
-        Long lastTimestamp = lastTimestampState.value();
-        if (lastTimestamp == null || (timestamp - lastTimestamp) > NEW_TRIP_THRESHOLD_MS) {
-            // NEW TRIP!
-            tripStartTimestampState.update(timestamp);
-            startLatState.update(position.getLocation().getLatitude());
-            startLonState.update(position.getLocation().getLongitude());
-            totalDistanceState.update(0.0);
-            totalReadingsState.update(1);
-            maxSpeedState.update(0.0);
-            out.collect("New trip started for VIN: " + vin);
-        } else {
-            // CONTINUING TRIP
-            long timeDelta = timestamp - lastTimestamp;
-            if (timeDelta < 500) {
-                lastLatState.update(position.getLocation().getLatitude());
-                lastLonState.update(position.getLocation().getLongitude());
-                lastTimestampState.update(timestamp);
-            }
-            double fromLat = lastLatState.value();
-            double fromLon = lastLonState.value();
-            double toLat = position.getLocation().getLatitude();
-            double toLon = position.getLocation().getLongitude();
-
-//            out.collect("DEBUG VIN: " + vin +
-//                    " timeDelta: " + timeDelta + "ms" +
-//                    " fromLat: " + fromLat + " toLat: " + toLat +
-//                    " fromLon: " + fromLon + " toLon: " + toLon);
-            double distance = GPSUtil.haversine(fromLat, fromLon, toLat, toLon);
-            out.collect("For VIN time elapsed is " + (timestamp - lastTimestamp));
-            double speedKph = GPSUtil.computeSpeedKph(distance, lastTimestamp, timestamp);
-
-            if (speedKph > SPEED_ANOMALY_KPH) {
-                //silently ignore anomalies
-                return;
-            }
-            // update state
-            double newDistance = totalDistanceState.value() + distance;
-            totalDistanceState.update(newDistance);
-            totalReadingsState.update(totalReadingsState.value() + 1);
-
-            if (speedKph > maxSpeedState.value()) {
-                maxSpeedState.update(speedKph);
-            }
-
-            if (speedKph > SPEED_LIMIT_KPH) {
-                Document speedAlert = new Document()
-                        .append("vin", vin)
-                        .append("timestamp", timestamp)
-                        .append("computedSpeedKph", speedKph)
-                        .append("latitude", position.getLocation().getLatitude())
-                        .append("longitude", position.getLocation().getLongitude());
-
-                speedAlertsCollection.insertOne(speedAlert);
-                out.collect("SPEED ALERT VIN: " + vin +
-                        " speed: " + String.format("%.2f", speedKph) + "kph");
-            }
-        }
-
-        // update last position
-        lastLatState.update(position.getLocation().getLatitude());
-        lastLonState.update(position.getLocation().getLongitude());
-        lastTimestampState.update(timestamp);
-
-        // set new timeout timer
+    }
+    /**
+     * Registers new trip timeout timer.
+     * If no message arrives within TRIP_TIMEOUT_MS,
+     * onTimer() fires and completes the trip.
+     */
+    private void registerTimer(Context ctx) throws Exception {
         long timerTime = ctx.timerService().currentProcessingTime() + TRIP_TIMEOUT_MS;
         ctx.timerService().registerProcessingTimeTimer(timerTime);
         timerState.update(timerTime);
     }
-/*
-    private double haversine(double lat1, double lon1, double lat2, double lon2) {
-        final double R = 6371000;
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    /**
+     * Saves speed alert to MongoDB and notifies downstream.
+     */
+    private void saveSpeedAlert(String vin, CarPosition position,
+                                long timestamp, double speedKph,
+                                Collector<String> out) {
+        Document alert = new Document()
+                .append("vin", vin)
+                .append("timestamp", timestamp)
+                .append("computedSpeedKph", speedKph)
+                .append("latitude", position.getLocation().getLatitude())
+                .append("longitude", position.getLocation().getLongitude());
+        speedAlertsCollection.insertOne(alert);
+        out.collect("SPEED ALERT VIN: " + vin +
+                " speed: " + String.format("%.2f", speedKph) + "kph");
     }
 
-    double computeSpeedKph(double distanceMeters, long fromTs, long toTs) {
-        double seconds = (toTs - fromTs) / 1000.0;
-        if (seconds <= 0) return 0;
-        return (distanceMeters / seconds) * 3.6;
-    }
-    */
-
+    /**
+     * This method implements boundary detection via timeout. Every position message resets
+     * a 60-seconds processing time timer. If no message arrives within 60 seconds - vehicle
+     * went silent, stopped, or lost signal - the timer fires and onTimer() saves the completed trip
+     * summary to MongoDB. and clears all the state for that VIN.
+     * Flink timer service is fault-tolerant via checkpointing, so even if the job crashes mid-trip,
+     * timers are restored and fire correctly after recovery.
+     */
     @Override
     public void onTimer(long timestamp, OnTimerContext ctx,
                         Collector<String> out) throws Exception {
@@ -264,7 +298,7 @@ public class CarPositionProcessFunction
             ));
         }
 
-        // clear ALL state
+        // clear ALL states
         lastLatState.clear();
         lastLonState.clear();
         lastTimestampState.clear();
@@ -276,10 +310,4 @@ public class CarPositionProcessFunction
         maxSpeedState.clear();
         timerState.clear();
     }
-
-//    private String formatDuration(long millis) {
-//        long minutes = millis / 60000;
-//        long seconds = (millis % 60000) / 1000;
-//        return String.format("%dm%02ds", minutes, seconds);
-//    }
 }

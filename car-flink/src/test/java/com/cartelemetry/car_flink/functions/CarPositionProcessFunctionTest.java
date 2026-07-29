@@ -5,7 +5,6 @@ import com.cartelemetry.proto.GpsLocation;
 import com.mongodb.client.MongoCollection;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.MapState;
-//import org.apache.flink.datastream.api.common.Collector;
 import org.apache.flink.streaming.api.TimerService;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.util.Collector;
@@ -19,6 +18,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 public class CarPositionProcessFunctionTest {
+
 /**
  * TESTS NEEDED :
  * → New trip detection
