@@ -19,8 +19,8 @@ public class VehicleRegistry {
     private final List<String> vinList;
 
     public VehicleRegistry(@Value("${generator.vehicle.count}") int vehicleCount) {
-        vinList = IntStream.range(0, vehicleCount)
-                .mapToObj(i -> String.format("VIN%06d", i))
+        vinList = IntStream.range(0, 1/*vehicleCount*/)
+                .mapToObj(i -> String.format("VIN-W%04d", i))
                 .collect(Collectors.toList());
     }
 

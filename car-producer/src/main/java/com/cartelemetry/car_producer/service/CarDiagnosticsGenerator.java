@@ -7,8 +7,9 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-
-@Service
+// TODO: THIS CLASS IS DISABLED ... CURRENTLY NOT NEEDED ... at least in this iteration.
+//   It will be "soon" reformatted to use VT model instead of "batches" ...
+//@Service
 public class CarDiagnosticsGenerator {
 
     VehicleRegistry vehicleRegistry;

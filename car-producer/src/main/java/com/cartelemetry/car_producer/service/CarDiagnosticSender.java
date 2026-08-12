@@ -7,8 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-
-@Service
+// TODO: THIS CLASS IS DISABLED ... CURRENTLY NOT NEEDED ... at least in this iteration.
+//  It will be "soon" reformatted to use VT model instead of "batches" ...
+//@Service
 public class CarDiagnosticSender {
     private static final Logger log = LoggerFactory.getLogger(CarDiagnosticSender.class);
     @Value("${kafka.topic.diagnostics}")
